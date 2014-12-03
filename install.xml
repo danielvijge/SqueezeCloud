@@ -3,7 +3,7 @@
 <extension>
 	<name>PLUGIN_SQUEEZECLOUD</name>
 	<module>Plugins::SqueezeCloud::Plugin</module>
-	<version>0.8.2.20</version>
+	<version>0.8.3</version>
 	<description>PLUGIN_SQUEEZECLOUD_DESC</description>
 	<icon>plugins/SqueezeCloud/icon.png</icon>
 	<defaultState>enabled</defaultState>
@@ -13,6 +13,6 @@
         	<maxVersion>7.*</maxVersion>
 	</targetApplication>
   	<optionsURL>plugins/SqueezeCloud/settings/basic.html</optionsURL>
-  	<creator>Daniel Vijge, Robert Gibbon, David Blackman</creator>
-  	<email>spam+squeezebox@vijge.net</email>
+  	<creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman</creator>
+  	<email>rsiebert80@gmail.com</email>
 </extension>
