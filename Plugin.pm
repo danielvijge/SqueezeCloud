@@ -541,7 +541,7 @@ sub metadata_provider {
 		fetchMetadata( $client, $url );
 	}
 	
-	return defaultMeta( $client, $url );
+	return { };
 }
 
 # This method is called when the user has selected the last main menu where 
