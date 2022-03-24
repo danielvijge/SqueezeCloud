@@ -1303,7 +1303,7 @@ sub toplevel {
 		my $param = '&' . URI::Escape::uri_escape_utf8('created_at[from]') . '=' . URI::Escape::uri_escape_utf8($from) .
 					'&' . URI::Escape::uri_escape_utf8('created_at[to]') . '=' . URI::Escape::uri_escape_utf8($to);
 		push(@$callbacks,
-		{ name => 'Hot tracks', type => 'link',   
+		{ name => string('PLUGIN_SQUEEZECLOUD_HOT') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACKS'), type => 'link',   
 			url  => \&tracksHandler, passthrough => [ { params => $param . '&order=hotness' } ], }
 		);
 
