@@ -82,7 +82,7 @@ sub _makeMetadata {
 		play => "soundcloud://" . $json->{'id'},
 		#url  => $json->{'permalink_url'},
 		#link => "soundcloud://" . $json->{'id'},
-		bitrate => '320kbps',
+		bitrate => '128kbps',
 		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
 		type => 'audio',
 		icon => $icon,
