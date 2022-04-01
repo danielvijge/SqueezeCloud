@@ -250,6 +250,7 @@ sub trackInfo {
 sub trackInfoURL {
 	my ( $class, $client, $url ) = @_;
 	$log->info("trackInfoURL: " . $url);
+	return undef;
 }
 
 # Metadata for a URL, used by CLI/JSON clients
