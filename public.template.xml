@@ -9,7 +9,7 @@
       <url>https://danielvijge.github.io/SqueezeCloud/{{ env['FOLDER'] }}/SqueezeCloud-{{ env['VERSION'] }}.zip</url>
       <link>https://github.com/danielvijge/SqueezeCloud</link>
       <sha>{{ env['SHA'] }}</sha>
-      <creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman</creator>
+      <creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman, KwarkLabs</creator>
     </plugin>
   </plugins>
 </extensions>
