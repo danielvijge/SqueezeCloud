@@ -3,8 +3,12 @@ package Plugins::SqueezeCloud::ProtocolHandler;
 # Plugin to stream audio from SoundCloud streams
 #
 # Released under GNU General Public License version 2 (GPLv2)
-# Written by David Blackman (first release), Robert Gibbon (improvements),
-#   Daniel Vijge (improvements)
+#
+# Written by David Blackman (first release),
+#   Robert Gibbon (improvements),
+#   Daniel Vijge (improvements),
+#   KwarkLabs (major SoundCloud API changes)
+#
 # See file LICENSE for full license details
 
 use strict;
@@ -34,14 +38,20 @@ Slim::Player::ProtocolHandlers->registerHandler('soundcloud', __PACKAGE__);
 use strict;
 use base 'Slim::Player::Protocols::HTTP';
 
+# Defines the timeout in seconds for a http request
+use constant HTTP_TIMEOUT => 15;
+use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
+
 use IO::Socket::SSL;
 IO::Socket::SSL::set_defaults(
-		SSL_verify_mode => Net::SSLeay::VERIFY_NONE() 
-			) if preferences('server')->get('insecureHTTPS');
+	SSL_verify_mode => Net::SSLeay::VERIFY_NONE() 
+) if preferences('server')->get('insecureHTTPS');
 
 my $prefs = preferences('plugin.squeezecloud');
 
 $prefs->init({ apiKey => "", playmethod => "stream" });
+
+my $prefix = 'sc:';
 
 sub canSeek { 0 }
 
@@ -51,29 +61,42 @@ sub getAuthenticationHeaders() {
 
 sub _makeMetadata {
 	my ($json) = shift;
-
+	
+	$log->debug('ProtocolHandler _makeMetadata started.');
+	
+	my $year;
+	if (int($json->{'release_year'}) > 0) {
+		$year = int($json->{'release_year'});
+	} elsif ($json->{'created_at'}) {
+		$year = substr $json->{'created_at'}, 0, 4;
+	}
+	
+	my $icon = getBetterArtworkURL($json->{'artwork_url'} || "");
 	my $DATA = {
-		duration => int($json->{'duration'} / 1000),
-		name => $json->{'title'},
+		id => $json->{'id'},
+		duration => $json->{'duration'} / 1000,
+		name => $json->{'title'},            
 		title => $json->{'title'},
 		artist => $json->{'user'}->{'username'},
-		album => " ",
-		#type => 'soundcloud',
-		#play => getStreamURL($json),
+		album => "SoundCloud",
+		play => "soundcloud://" . $json->{'id'},
 		#url  => $json->{'permalink_url'},
 		#link => "soundcloud://" . $json->{'id'},
-		bitrate   => '320kbps',
-		type      => 'MP3 (SoundCloud)',
-		#info_link => $json->{'permalink_url'},
-		icon => getBetterArtworkURL($json->{'artwork_url'} || ""),
-		image => getBetterArtworkURL($json->{'artwork_url'} || ""),
-		cover => getBetterArtworkURL($json->{'artwork_url'} || ""),
+		bitrate => '128kbps',
+		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
+		type => 'audio',
+		icon => $icon,
+		image => $icon,
+		cover => $icon,
+		year => ($year ? $year : ''),
+		on_select => 'play',
 	};
 }
 
 sub getStreamURL {
 	my $json = shift;
-
+	$log->debug('getStreamURL started.');
+	
 	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
 		return $json->{'download_url'};
 	}
@@ -148,9 +171,9 @@ sub gotNextTrack {
 	my $meta = _makeMetadata($track);
 	$song->duration( $meta->{duration} );
 
-	my $cache = Slim::Utils::Cache->new;
+	my $cache = Slim::Utils::Cache->new('squeezecloud');
 	$log->info("setting ". 'soundcloud_meta_' . $track->{id});
-	$cache->set( 'soundcloud_meta_' . $track->{id}, $meta, 86400 );
+	$cache->set($prefix . 'track' . '-' . $track->{id} , $meta, META_CACHE_TTL);
 
 	$http->params->{callback}->();
 }
@@ -229,71 +252,11 @@ sub trackInfoURL {
 	$log->info("trackInfoURL: " . $url);
 }
 
-use Data::Dumper;
 # Metadata for a URL, used by CLI/JSON clients
 sub getMetadataFor {
 	my ( $class, $client, $url ) = @_;
-	
-	return {} unless $url;
-
-	#$log->info("metadata: " . $url);
-
-	my $icon = $class->getIcon();
-	my $cache = Slim::Utils::Cache->new;
-
-	# If metadata is not here, fetch it so the next poll will include the data
-	my ($trackId) = $url =~ m{soundcloud://(.+)};
-	#$log->info("looking for  ". 'soundcloud_meta_' . $trackId );
-	my $meta      = $cache->get( 'soundcloud_meta_' . $trackId );
-
-	if ( !$meta && !$client->master->pluginData('fetchingMeta') ) {
-		# Go fetch metadata for all tracks on the playlist without metadata
-		my @need;
-
-		for my $track ( @{ Slim::Player::Playlist::playList($client) } ) {
-			my $trackURL = blessed($track) ? $track->url : $track;
-			if ( $trackURL =~ m{soundcloud://(.+)} ) {
-				my $id = $1;
-				if ( !$cache->get("soundcloud_meta_$id") ) {
-					push @need, $id;
-				}
-			}
-		}
-		
-		if ( main::DEBUGLOG && $log->is_debug ) {
-			$log->debug( "Need to fetch metadata for: " . join( ', ', @need ) );
-		}
-		
-		# $client->master->pluginData( fetchingMeta => 1 );
-		
-		# my $metaUrl = Slim::Networking::SqueezeNetwork->url(
-		# 	"/api/classical/v1/playback/getBulkMetadata"
-		# );
-		
-		# my $http = Slim::Networking::SqueezeNetwork->new(
-		# 	\&_gotBulkMetadata,
-		# 	\&_gotBulkMetadataError,
-		# 	{
-		# 			client  => $client,
-		# 			timeout => 60,
-		# 	},
-		# );
-
-		# $http->post(
-		# 	$metaUrl,
-		# 	'Content-Type' => 'application/x-www-form-urlencoded',
-		# 	'trackIds=' . join( ',', @need ),
-		# );
-	}
-
-	#$log->debug( "Returning metadata for: $url" . ($meta ? '' : ': default') );
-
-	return $meta || {
-		bitrate   => '320kbps',
-		type      => 'MP3 (SoundCloud)',
-		icon      => $icon,
-		cover     => $icon,
-	};
+	my $args = { params => {isProtocolHandler => 1}};
+	return Plugins::SqueezeCloud::Plugin::metadata_provider($client, $url, $args);
 }
 
 sub canDirectStreamSong {
