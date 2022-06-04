@@ -466,11 +466,11 @@ sub getStreamURL {
 	my $json = shift;
 	
 	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
-		$log-debug('download_url: ' . $json->{'download_url'});
+		$log->debug('download_url: ' . $json->{'download_url'});
 		return $json->{'download_url'};
 	}
 	else {
-		$log-debug('stream_url: ' . $json->{'stream_url'});
+		$log->debug('stream_url: ' . $json->{'stream_url'});
 		return $json->{'stream_url'};
 	}
 }
