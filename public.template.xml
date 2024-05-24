@@ -5,6 +5,8 @@
   <plugins>
     <plugin name="SqueezeCloud" version="{{ env['VERSION'] }}" minTarget="7.5" maxTarget="*">
       <title lang="EN">SqueezeCloud</title>
+      <category>musicservices</category>
+      <icon>https://raw.githubusercontent.com/danielvijge/SqueezeCloud/master/HTML/EN/plugins/SqueezeCloud/html/images/icon.png</icon>
       <desc lang="EN">Browse, search and play urls from soundcloud</desc>
       <url>https://danielvijge.github.io/SqueezeCloud/{{ env['FOLDER'] }}/SqueezeCloud-{{ env['VERSION'] }}.zip</url>
       <link>https://github.com/danielvijge/SqueezeCloud</link>
