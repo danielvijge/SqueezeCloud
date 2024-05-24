@@ -5,7 +5,7 @@ SOUNDCLOUD
 	EN	SoundCloud
 
 PLUGIN_SQUEEZECLOUD_DESC
-	EN	Play music from SoundCloud. Supports top tracks, playlists and urls.
+	EN	Play music from SoundCloud
 
 PLUGIN_SQUEEZECLOUD_HOT
 	EN	Hottest Tracks
