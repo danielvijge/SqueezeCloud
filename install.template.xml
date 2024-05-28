@@ -14,5 +14,5 @@
 	</targetApplication>
   	<optionsURL>plugins/SqueezeCloud/settings/basic.html</optionsURL>
   	<creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman, KwarkLabs</creator>
-  	<email>spam+squeezebox@vijge.net</email>
+  	<homepageURL>https://github.com/danielvijge/SqueezeCloud</homepageURL>
 </extension>
