@@ -27,7 +27,7 @@ jobs:
       - name: Set version number (development build)
         if: "!contains(github.ref, 'refs/tags/')"
         run: |
-          echo "VERSION=`git describe --tags --abbrev=0`.`git rev-list $(git describe --tags --abbrev=0)..HEAD --count`" >> $GITHUB_ENV
+          echo "VERSION=`git describe --tags --abbrev=0`.`git rev-list $(git describe --tags --abbrev=0)..HEAD --count`-dev" >> $GITHUB_ENV
           echo "RELEASE_CHANNEL=dev" >> $GITHUB_ENV
           echo "FOLDER=dev-builds" >> $GITHUB_ENV
 
