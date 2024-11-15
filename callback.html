@@ -6,7 +6,7 @@
   <body onload="">
     <script>
 function getQueryVariable(variable) { 
-  var query = window.location.hash.substring(1); 
+  var query = window.location.search.substring(1); 
   var vars = query.split("&"); 
   for (var i=0;i<vars.length;i++) { 
     var pair = vars[i].split("="); 
@@ -15,11 +15,21 @@ function getQueryVariable(variable) {
     } 
   } 
   alert('Query Variable ' + variable + ' not found'); 
+}
+
+function copyTextToClipboard() {
+  var copyText = document.getElementById("code");
+  copyText.select();
+  copyText.setSelectionRange(0, 99999); // For mobile devices
+  navigator.clipboard.writeText(copyText.value);
 } 
 
-var apiKey = getQueryVariable('access_token');
-if (!!apiKey) {
-  document.write('Your api key is: <b>' + apiKey + '</b>');
+var code = getQueryVariable('code');
+var state = getQueryVariable('state');
+if (!!code && !!state) {
+  document.write('Your code for ' + state + ' is:<br/>');
+  document.write('<input type="text" id="code" value="'+code+'"/>');
+  document.write('<button onclick="copyTextToClipboard()">Copy to clipboard</button>');
 } else {
   document.write('something went wrong :-(');
 }
