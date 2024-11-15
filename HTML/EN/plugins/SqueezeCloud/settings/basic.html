@@ -1,30 +1,51 @@
 [% PROCESS settings/header.html %]
 
+	[% IF code %]
 	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
-	<script src="https://connect.soundcloud.com/sdk/sdk-3.3.2.js"></script>
+	[% "PLUGIN_SQUEEZECLOUD_LOGGING_IN" | string %]
+	[% END %]
+	[% ELSIF username %]
+	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
+	[% "PLUGIN_SQUEEZECLOUD_LOGGED_IN_AS" | string %] [% username %]<br/>
+	<input type="checkbox" class="stdedit" name="logout" />[% "PLUGIN_SQUEEZECLOUD_LOG_OUT" | string %]
+	[% END %]
+	[% ELSIF codeChallenge %]
+	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
 	<script>
-		SC.initialize({
-		  client_id: '112d35211af80d72c8ff470ab66400d8',
-		  redirect_uri: 'https://danielvijge.github.io/SqueezeCloud/callback.html',
-		  response_type: 'code',
-		  scope: ''
-		});
+		function openAuthorizationWindow() {
+			window.open(
+				'https://secure.soundcloud.com/authorize?' +
+				'client_id=112d35211af80d72c8ff470ab66400d8' +
+				'&redirect_uri=https://danielvijge.github.io/SqueezeCloud/callback.html' +
+				'&response_type=code' +
+				'&code_challenge=[% codeChallenge %]' +
+				'&code_challenge_method=S256' +
+				'&state=[% hostName %]',
+				'SoundCloudAuthorizationWindow',
+				'width=500,height=800'
+			);
+		};
 	</script>
-	<img src="/plugins/SqueezeCloud/html/images/btn-connect-sc-l.png" alt="Connect with SoundCloud" onclick="SC.connect();" style="cursor: pointer;" />
-
+	<img src="/plugins/SqueezeCloud/html/images/btn-connect-sc-l.png" alt="Connect with SoundCloud" onclick="openAuthorizationWindow()" style="cursor: pointer;"/>
 	[% END %]
 
-	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_APIKEY" desc="PLUGIN_SQUEEZECLOUD_APIKEY_DESC" %]
+	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CODE" desc="PLUGIN_SQUEEZECLOUD_CODE_DESC" %]
 	<div class="prefDesc">
-		<input type="text" class="stdedit" name="pref_apiKey" value="[% prefs.apiKey %]" size="40" />
+		<input type="text" class="stdedit" name="code" size="40" />
 	</div>
+	[% END %]
+	[% ELSE %]
+	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
+	[% "PLUGIN_SQUEEZECLOUD_LOGIN_ERROR" | string %]
+	[% END %]
+
 	[% END %]
 
 	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_PLAYMETHOD" desc="PLUGIN_SQUEEZECLOUD_PLAYMETHOD_DESC" %]
 	<div class="prefDesc">
 		<select name="pref_playmethod" class="stdedit">
-			<option[% IF prefs.playmethod == 'stream' %] selected[% END %] value="stream">Always use stream method</option>
-			<option[% IF prefs.playmethod == 'download' %] selected[% END %] value="download">Use download method if available</option>
+			<option[% IF prefs.playmethod == 'stream' %] selected[% END %] value="stream">[% "PLUGIN_SQUEEZECLOUD_USE_STREAM_METHOD" | string %]</option>
+			<option[% IF prefs.playmethod == 'download' %] selected[% END %] value="download">[% "PLUGIN_SQUEEZECLOUD_USE_DOWNLOAD_METHOD" | string %]</option>
 		</select>
 	</div>
 
