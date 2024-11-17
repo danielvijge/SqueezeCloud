@@ -91,7 +91,7 @@ sub getAuthorizationToken {
       my $response = shift;
       my $result = eval { from_json($response->content) };
       
-      $cache->set('access_token', $result->{access_token}, 30);
+      $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
       $cache->set('refresh_token', $result->{refresh_token}, META_CACHE_TTL);
     },
     sub {
@@ -141,7 +141,7 @@ sub getAccessTokenWithRefreshToken {
       $log->debug('Successful request for refresh_token');
       my $response = shift;
       my $result = eval { from_json($response->content) };
-      $cache->set('access_token', $result->{access_token}, 30);
+      $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
       $cache->set('refresh_token', $result->{refresh_token}, META_CACHE_TTL);
       $cb->(@params) if $cb;
     },
