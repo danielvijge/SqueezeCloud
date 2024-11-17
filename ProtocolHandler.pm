@@ -28,6 +28,7 @@ use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
 use Scalar::Util qw(blessed);
+use Plugins::SqueezeCloud::Oauth2;
 
 my $log   = logger('plugin.squeezecloud');
 
@@ -54,10 +55,6 @@ $prefs->init({ apiKey => "", playmethod => "stream" });
 my $prefix = 'sc:';
 
 sub canSeek { 0 }
-
-sub getAuthenticationHeaders() {
-	return 'Authorization' => 'OAuth ' . $prefs->get('apiKey');
-}
 
 sub _makeMetadata {
 	my ($json) = shift;
@@ -154,7 +151,7 @@ sub gotNextTrack {
 		requests_redirectable => [],
 	);
 
-	my $res = $ua->get($stream, getAuthenticationHeaders() );
+	my $res = $ua->get($stream, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
 	my $redirector = $res->header( 'location' );
 
@@ -195,6 +192,11 @@ sub getNextTrack {
 		
 	# Talk to SN and get the next track to play
 	my $trackURL = "https://api.soundcloud.com/tracks/" . $id;
+
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&getNextTrack, @_);
+    	return;
+    }
 		
 	my $http = Slim::Networking::SimpleAsyncHTTP->new(
 		\&gotNextTrack,
@@ -210,7 +212,7 @@ sub getNextTrack {
 		
 	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $id");
 		
-	$http->get( $trackURL, getAuthenticationHeaders() );
+	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 }
 
 # To support remote streaming (synced players, slimp3/SB1), we need to subclass Protocols::HTTP

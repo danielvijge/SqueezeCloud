@@ -29,7 +29,7 @@ use POSIX qw(strftime);
 use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
-
+use Plugins::SqueezeCloud::Oauth2;
 # Defines the timeout in seconds for a http request
 use constant HTTP_TIMEOUT => 15;
 
@@ -152,11 +152,6 @@ sub defaultMeta {
 	};
 	
 	$log->debug('defaultMeta ended.');
-}
-
-sub getAuthenticationHeaders() {
-	$log->debug('getAuthenticationHeaders started.');
-	return 'Authorization' => 'OAuth ' . $prefs->get('apiKey');
 }
 
 # Extracts the available metadata for a tracks from the JSON data. The data 
@@ -346,9 +341,14 @@ sub likeTrack {
 	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
     $log->debug("Liking: $url");
 
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likeTrack, @_);
+    	return;
+    }
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -376,10 +376,14 @@ sub unlikeTrack {
 	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
     $log->debug("Unliking: $url");
 
-	
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikeTrack, @_);
+    	return;
+    }
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -451,7 +455,7 @@ sub _gotMetadata {
 		requests_redirectable => [],
 	);
 
-	my $res = $ua->get( getStreamURL($json), getAuthenticationHeaders() );
+	my $res = $ua->get( getStreamURL($json), Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
 	my $stream = $res->header( 'location' );
 	
@@ -487,6 +491,11 @@ sub fetchMetadata {
 		my $extras = "linked_partitioning=true&limit=1";
 		my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params;
 		
+		if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&fetchMetadata, @_);
+			return;
+		}
+
         # Call the server to fetch the data via the asynchronous http request. 
         # The methods are called when a response was received or an error 
         # occurred. Additional information to the http call is passed via 
@@ -501,7 +510,7 @@ sub fetchMetadata {
 			},
 		);
 
-		$http->get($queryUrl, getAuthenticationHeaders());
+		$http->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	}
 	
 	$log->debug('fetchMetadata ended.');
@@ -652,6 +661,11 @@ sub _getTracks {
 	$log->debug('_getTracks started.');
 	my ($client, $searchType, $index, $quantity, $queryUrl, $uid, $cursor, $parser, $callback, $menu) = @_;
 	
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&_getTracks, @_);
+		return;
+	}
+
 	Slim::Networking::SimpleAsyncHTTP->new(
 		# Called when a response has been received for the request.
 		sub {
@@ -707,7 +721,7 @@ sub _getTracks {
 			$callback->([ { name => $_[1], type => 'text' } ]);
 		},
 		
-	)->get($queryUrl, getAuthenticationHeaders());
+	)->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	
 	$log->debug('_getTracks ended.');
 }
@@ -788,6 +802,11 @@ sub urlHandler {
 	my $queryUrl = "https://api.soundcloud.com/resolve?url=$url";
     $log->debug("fetching: $queryUrl");
 
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&urlHandler, @_);
+    	return;
+    }
+
 	my $fetch = sub {
 		Slim::Networking::SimpleAsyncHTTP->new(
 			sub {
@@ -806,7 +825,7 @@ sub urlHandler {
 				$log->warn("error: $_[1]");
 				$callback->([ { name => $_[1], type => 'text' } ]);
 			},
-		)->get($queryUrl, getAuthenticationHeaders());
+		)->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	};
 		
 	$fetch->();
@@ -867,9 +886,14 @@ sub likePlaylist {
 	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
     $log->debug("Liking: $url");
 
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likePlaylist, @_);
+    	return;
+    }
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -897,10 +921,14 @@ sub unlikePlaylist {
 	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
     $log->debug("Unliking: $url");
 
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikePlaylist, @_);
+    	return;
+    }
 	
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -1070,9 +1098,14 @@ sub followFriend {
 	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
     $log->debug("Following: $url");
 
+    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&followFriend, @_);
+    	return;
+    }
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -1099,10 +1132,14 @@ sub unfollowFriend {
 	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
     $log->debug("Unfollowing: $url");
 
-	
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unfollowFriend, @_);
+		return;
+	}
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, getAuthenticationHeaders());
+		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 		my $response =  $ua->request($request);
 		
 		if ( $response->is_success() ) {
@@ -1249,7 +1286,7 @@ sub playerMenu { shift->can('nonSNApps') ? undef : 'RADIO' }
 sub toplevel {
 	$log->debug('toplevel started.');
 	my ($client, $callback, $args) = @_;
-	
+
     # These are the available main menus. The variable type defines the menu 
     # type (search allows text input, link opens another menu), the url defines
     # the method that shall be called when the user has selected the menu entry.
@@ -1257,8 +1294,8 @@ sub toplevel {
     # method defined by the url variable.  
 	my $callbacks = [];
 
-    # Add the following menu items only when the user has specified an API key
-	if ($prefs->get('apiKey') ne '') {
+    # Add the following menu items only when the user is logged in
+	if (Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
 
 		# Menu entry to show all activities (Stream)
 		push(@$callbacks, 
@@ -1336,9 +1373,10 @@ sub toplevel {
 		push(@$callbacks, 
 			{ name => string('PLUGIN_SQUEEZECLOUD_URL'), type => 'search', url  => \&urlHandler, }
 		);
+
 	} else {
 		push(@$callbacks, 
-			{ name => string('PLUGIN_SQUEEZECLOUD_SET_API_KEY'), type => 'text' }
+			{ name => string('PLUGIN_SQUEEZECLOUD_LOGIN'), type => 'text' }
 		);
 	}
 

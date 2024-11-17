@@ -13,6 +13,14 @@ use strict;
 use base qw(Slim::Web::Settings);
 
 use Slim::Utils::Prefs;
+use Slim::Utils::Log;
+use Slim::Utils::Cache;
+
+use JSON::XS::VersionOneAndTwo;
+
+my $log   = logger('plugin.squeezecloud');
+my $prefs = preferences('plugin.squeezecloud');
+my $cache = Slim::Utils::Cache->new();
 
 # Returns the name of the plugin. The real 
 # string is specified in the strings.txt file.
@@ -30,6 +38,60 @@ sub page {
 
 sub prefs {
 	return (preferences('plugin.squeezecloud'), qw(apiKey playmethod));
+}
+
+sub handler {
+	my ($class, $client, $params, $callback, @args) = @_;
+
+	if ($params->{code} && $params->{code} ne '') {
+		$log->debug('Getting access token and refresh token from code');
+		Plugins::SqueezeCloud::Oauth2::getAuthorizationToken($params->{code});
+	}
+	elsif ($params->{logout}) {
+		$log->debug('Logging out...');
+		$cache->remove('refresh_token');
+		$cache->remove('access_token');
+		$prefs->remove('apiKey');
+	}
+	elsif (!$cache->get('refresh_token')) {
+		$log->debug('Generating code and code challange');
+		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
+		$params->{codeChallenge} = $codeChallenge;
+		$params->{hostName} = Slim::Utils::Misc::getLibraryName();
+	}
+
+  my $http = Slim::Networking::SimpleAsyncHTTP->new(
+    sub {
+    	$log->debug('Successful request for user info.');
+      my $response = shift;
+      my $result = eval { from_json($response->content) };
+      $log->debug("User name: " . $result->{username});
+      $params->{username} = $result->{username};
+
+      $callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+    },
+    sub {
+    	$log->error('Failed request for user info.');
+      $log->error($_[1]);
+      $callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+    },
+    {
+      timeout => 15,
+    }
+  );
+
+  if (Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
+
+  	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&handler, @_);
+    	return;
+    }
+    
+  	$http->get("https://api.soundcloud.com/me", Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
+  }
+  else {
+  	$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+  }
 }
 
 # Always end with a 1 to make Perl happy
