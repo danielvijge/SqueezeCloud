@@ -46,12 +46,6 @@ jobs:
       - name: Build package
         run: |
           zip -r SqueezeCloud-${{ env.VERSION }}.zip . -x \*.zip \*.sh \*.git\* \*README\* \*webauth\* \*.sublime\* \*.DS_Store\* \*.editorconfig \*.template.xml
-      
-      - name: Save artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: SqueezeCloud-${{ env.VERSION }}.zip
-          path: SqueezeCloud-${{ env.VERSION }}.zip
 
       - name: Calculate SHA
         run: |
