@@ -71,7 +71,8 @@ sub getAccessToken {
 sub getAuthorizationToken {
   $log->debug('getAuthorizationToken started.');
 
-  my $code  = shift;
+  my $cb = shift;
+  my ($class, $client, $params, $callback, @args) = @_;
 
   if (!$cache->get('codeVerifier')) {
     $log->error('No code verifier is available. Reload the page and try to authenticate again.');
@@ -83,7 +84,7 @@ sub getAuthorizationToken {
     "&client_secret=" . CLIENT_SECRET .
     "&redirect_uri=" . REDIRECT_URI .
     "&code_verifier=" . $cache->get('codeVerifier') .
-    "&code=" . $code;
+    "&code=" . $params->{code};
 
   my $http = Slim::Networking::SimpleAsyncHTTP->new(
     sub {
@@ -93,6 +94,8 @@ sub getAuthorizationToken {
       
       $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
       $cache->set('refresh_token', $result->{refresh_token}, META_CACHE_TTL);
+      delete $params->{code};
+      $cb->($class, $client, $params, $callback, @args) if $cb;
     },
     sub {
       $log->error('Failed request for authorization_code.');

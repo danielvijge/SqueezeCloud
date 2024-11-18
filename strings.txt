@@ -50,10 +50,10 @@ PLUGIN_SQUEEZECLOUD_PLAYLIST_BROWSE
 	EN	Playlists
 
 PLUGIN_SQUEEZECLOUD_CODE
-	EN	Soundcloud authorization code
+	EN	SoundCloud authorisation code
 
 PLUGIN_SQUEEZECLOUD_CODE_DESC
-	EN	Paste your autorization code after clicking the button above, then press Save
+	EN	Paste your authorisation code after clicking the button above, then press Apply
 
 PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD
 	EN	Login to SoundCloud
@@ -91,17 +91,11 @@ PLUGIN_SQUEEZECLOUD_ERROR
 PLUGIN_SQUEEZECLOUD_LOGIN
 	EN	Log in to SoundCloud in Advanced settings
 
-PLUGIN_SQUEEZECLOUD_LOGGING_IN
-	EN	Logging you in... (should be good. Press Apply again, or refresh this page to see the result.)
-
 PLUGIN_SQUEEZECLOUD_LOGGED_IN_AS
 	EN	Logged in as
 
 PLUGIN_SQUEEZECLOUD_LOG_OUT
 	EN	Log out
-
-PLUGIN_SQUEEZECLOUD_LOGIN_ERROR
-	EN	Something went wrong. Try to refresh the page.
 
 PLUGIN_SQUEEZECLOUD_USE_STREAM_METHOD
 	EN	Always use stream method

@@ -45,7 +45,8 @@ sub handler {
 
 	if ($params->{code} && $params->{code} ne '') {
 		$log->debug('Getting access token and refresh token from code');
-		Plugins::SqueezeCloud::Oauth2::getAuthorizationToken($params->{code});
+		Plugins::SqueezeCloud::Oauth2::getAuthorizationToken(\&handler, @_);
+		return;
 	}
 	elsif ($params->{logout}) {
 		$log->debug('Logging out...');
@@ -53,7 +54,8 @@ sub handler {
 		$cache->remove('access_token');
 		$prefs->remove('apiKey');
 	}
-	elsif (!$cache->get('refresh_token')) {
+	
+	if (!Plugins::SqueezeCloud::Oauth2::isRefreshTokenAvailable()) {
 		$log->debug('Generating code and code challange');
 		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
 		$params->{codeChallenge} = $codeChallenge;

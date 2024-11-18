@@ -1,15 +1,14 @@
 [% PROCESS settings/header.html %]
 
-	[% IF code %]
-	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
-	[% "PLUGIN_SQUEEZECLOUD_LOGGING_IN" | string %]
-	[% END %]
-	[% ELSIF username %]
+	[% IF username %]
+
 	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
 	[% "PLUGIN_SQUEEZECLOUD_LOGGED_IN_AS" | string %] [% username %]<br/>
 	<input type="checkbox" class="stdedit" name="logout" />[% "PLUGIN_SQUEEZECLOUD_LOG_OUT" | string %]
 	[% END %]
-	[% ELSIF codeChallenge %]
+	[% END %]
+
+	[% IF codeChallenge %]
 	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
 	<script>
 		function openAuthorizationWindow() {
@@ -33,10 +32,6 @@
 	<div class="prefDesc">
 		<input type="text" class="stdedit" name="code" size="40" />
 	</div>
-	[% END %]
-	[% ELSE %]
-	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD" desc="PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC" %]
-	[% "PLUGIN_SQUEEZECLOUD_LOGIN_ERROR" | string %]
 	[% END %]
 
 	[% END %]
