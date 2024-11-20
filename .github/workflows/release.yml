@@ -75,8 +75,13 @@ jobs:
           cp /tmp/public*.xml .
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git add ${{ env.FOLDER }}/SqueezeCloud-${{ env.VERSION }}.zip
-          git commit -m "Github Actions release ${{ env.VERSION }}" -a
+          if [ "${{ env.RELEASE_CHANNEL }}" == "dev" ]; then
+            git add ${{ env.FOLDER }}/SqueezeCloud-${{ env.VERSION }}.zip
+            COMMIT_MESSAGE_TYPE="development build"
+          else
+            COMMIT_MESSAGE_TYPE="release"
+          fi
+          git commit -m "Github Actions ${COMMIT_MESSAGE_TYPE} ${{ env.VERSION }}" -a
 
       - name: Push changes to gh-pages
         uses: ad-m/github-push-action@master

@@ -8,7 +8,11 @@
       <category>musicservices</category>
       <icon>https://raw.githubusercontent.com/danielvijge/SqueezeCloud/master/HTML/EN/plugins/SqueezeCloud/html/images/icon.png</icon>
       <desc lang="EN">Play music from SoundCloud</desc>
+{%- if env['RELEASE_CHANNEL'] == 'release' %}
+      <url>https://github.com/danielvijge/SqueezeCloud/releases/download/{{ env['VERSION'] }}/SqueezeCloud-{{ env['VERSION'] }}.zip</url>
+{%- else %}
       <url>https://danielvijge.github.io/SqueezeCloud/{{ env['FOLDER'] }}/SqueezeCloud-{{ env['VERSION'] }}.zip</url>
+{%- endif %}
       <link>https://github.com/danielvijge/SqueezeCloud</link>
       <sha>{{ env['SHA'] }}</sha>
       <creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman, KwarkLabs</creator>
