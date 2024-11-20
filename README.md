@@ -1,15 +1,14 @@
-# A SoundCloud plugin for Logitech SqueezeBox media server #
+# A SoundCloud plugin for Lyrion music server #
 
-This is a Logitech Media Server (LMS) (a.k.a Squeezebox server) plugin to play
-tracks from SoundCloud. To install, use the settings page of Logitech Media server.
-Go to the _Plugins_ tab, scroll down to _Third party source_ and select _SqueezeCloud_.
+This is a Lyrion Music Server (LMS) (a.k.a Squeezebox server) plugin to play
+tracks from SoundCloud. To install, use the settings page of Lyrion Media Server.
+Go to the _Plugins_ tab, scroll down to _Third party source_ and select SoundCloud.
 Press the _Apply_ button and restart LMS.
 
-After installation, configure it via _Settings_ > _Advanced_ > _SqueezeCloud_
+After installation, configure it via _Settings_ > _Advanced_ > _SoundCloud__
 
-The plugin is included as a default third party resource. It is distributed via my
-[personal repository](https://server.vijge.net/squeezebox/) This third party repository
-is synced with the repository XML files on GitHub. It is also possible to directly include
+The plugin is included as a default third party resource. It is retrieved from this
+GitHub repository. It is also possible to directly include
 the repository XML from GitHub. For the release version, include
     
     https://danielvijge.github.io/SqueezeCloud/public.xml
@@ -17,6 +16,8 @@ the repository XML from GitHub. For the release version, include
 For the development version (updated with every commit), include
 
     https://danielvijge.github.io/SqueezeCloud/public-dev.xml
+
+The development version might be broken at times.
 
 ## SSL support ##
 
