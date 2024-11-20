@@ -27,13 +27,13 @@ You can do that on Debian Linux (Raspian, Ubuntu, Mint etc.) like this:
 
 	sudo apt-get install libssl-dev
 	sudo perl -MCPAN -e 'install IO::Socket::SSL'
-	sudo service logitechmediaserver restart
+	sudo systemctl restart lyrionmusicserver.service
 
 And on Red Hat Enterprise Linux (Fedora, CentOS, etc.) like this:
 
     sudo yum -y install openssl-devel
     sudo perl -MCPAN -e 'install IO::Socket::SSL'
-    sudo service logitechmediaserver restart
+    sudo systemctl restart lyrionmusicserver.service
 
 ## Licence ##
 
