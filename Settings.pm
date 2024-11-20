@@ -55,7 +55,7 @@ sub handler {
 		$prefs->remove('apiKey');
 	}
 
-	if (!Plugins::SqueezeCloud::Oauth2::isRefreshTokenAvailable()) {
+	if (!Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
 		$log->debug('Generating code and code challange');
 		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
 		$params->{codeChallenge} = $codeChallenge;
