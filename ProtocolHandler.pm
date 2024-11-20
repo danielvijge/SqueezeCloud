@@ -46,7 +46,7 @@ use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
 
 use IO::Socket::SSL;
 IO::Socket::SSL::set_defaults(
-	SSL_verify_mode => Net::SSLeay::VERIFY_NONE() 
+	SSL_verify_mode => Net::SSLeay::VERIFY_NONE()
 ) if preferences('server')->get('insecureHTTPS');
 
 my $prefs = preferences('plugin.squeezecloud');
@@ -57,21 +57,21 @@ sub canSeek { 0 }
 
 sub _makeMetadata {
 	my ($json) = shift;
-	
+
 	$log->debug('ProtocolHandler _makeMetadata started.');
-	
+
 	my $year;
 	if (int($json->{'release_year'}) > 0) {
 		$year = int($json->{'release_year'});
 	} elsif ($json->{'created_at'}) {
 		$year = substr $json->{'created_at'}, 0, 4;
 	}
-	
+
 	my $icon = getBetterArtworkURL($json->{'artwork_url'} || "");
 	my $DATA = {
 		id => $json->{'id'},
 		duration => $json->{'duration'} / 1000,
-		name => $json->{'title'},            
+		name => $json->{'title'},
 		title => $json->{'title'},
 		artist => $json->{'user'}->{'username'},
 		album => "SoundCloud",
@@ -92,7 +92,7 @@ sub _makeMetadata {
 sub getStreamURL {
 	my $json = shift;
 	$log->debug('getStreamURL started.');
-	
+
 	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
 		return $json->{'download_url'};
 	}
@@ -119,7 +119,7 @@ sub scanUrl {
 sub gotNextTrack {
 	my $http   = shift;
 	my $client = $http->params->{client};
-	my $song   = $http->params->{song};     
+	my $song   = $http->params->{song};
 	my $url    = $song->currentTrack()->url;
 	my $track  = eval { from_json( $http->content ) };
 
@@ -135,11 +135,11 @@ sub gotNextTrack {
 				songName => $@ || $track->{error},
 			} );
 		}
-	
+
 		$http->params->{'errorCallback'}->( 'PLUGIN_SQUEEZECLOUD_NO_INFO', $track->{error} );
 		return;
 	}
-	
+
 	# Save metadata for this track
 	$song->pluginData( $track );
 
@@ -181,21 +181,21 @@ sub gotNextTrackError {
 
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
-		
+
 	my $client = $song->master();
 	my $url    = $song->currentTrack()->url;
-		
+
 	# Get next track
 	my ($id) = $url =~ m{^soundcloud://(.*)$};
-		
+
 	# Talk to SN and get the next track to play
 	my $trackURL = "https://api.soundcloud.com/tracks/" . $id;
 
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&getNextTrack, @_);
-    	return;
-    }
-		
+			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&getNextTrack, @_);
+			return;
+		}
+
 	my $http = Slim::Networking::SimpleAsyncHTTP->new(
 		\&gotNextTrack,
 		\&gotNextTrackError,
@@ -207,9 +207,9 @@ sub getNextTrack {
 			timeout       => 35,
 		},
 	);
-		
+
 	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $id");
-		
+
 	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 }
 

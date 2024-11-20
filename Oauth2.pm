@@ -21,20 +21,20 @@ my $log   = logger('plugin.squeezecloud');
 my $prefs = preferences('plugin.squeezecloud');
 my $cache = Slim::Utils::Cache->new('squeezecloud');
 
-use constant CLIENT_ID => "112d35211af80d72c8ff470ab66400d8";
-use constant CLIENT_SECRET => "fc63200fee37d02bc3216cfeffe5f5ae";
-use constant REDIRECT_URI => "https%3A%2F%2Fdanielvijge.github.io%2FSqueezeCloud%2Fcallback.html";
+use constant CLIENT_ID => '112d35211af80d72c8ff470ab66400d8';
+use constant CLIENT_SECRET => 'fc63200fee37d02bc3216cfeffe5f5ae';
+use constant REDIRECT_URI => 'https%3A%2F%2Fdanielvijge.github.io%2FSqueezeCloud%2Fcallback.html';
 
 sub isLoggedIn {
-  return(isRefreshTokenAvailable() || isApiKeyAvailable());
+	return(isRefreshTokenAvailable() || isApiKeyAvailable());
 }
 
 sub isApiKeyAvailable {
-   return ($prefs->get('apiKey') ne '');
+	return ($prefs->get('apiKey') ne '');
 }
 
 sub isAccessTokenAvailable {
-  return ($cache->get('access_token') ne '');
+	return ($cache->get('access_token') ne '');
 }
 
 sub isRefreshTokenAvailable {
@@ -42,141 +42,140 @@ sub isRefreshTokenAvailable {
 }
 
 sub isAccessTokenExpired {
-  return 0 if isApiKeyAvailable();       # API key cannot expire
-  return 0 if isAccessTokenAvailable();  # Access token still valid
-  return 1 if isRefreshTokenAvailable(); # Access token expired, refresh token available
-  return 1;                              # This should not happen, equal to isLoggedIn() == false
+	return 0 if isApiKeyAvailable();       # API key cannot expire
+	return 0 if isAccessTokenAvailable();  # Access token still valid
+	return 1 if isRefreshTokenAvailable(); # Access token expired, refresh token available
+	return 1;                              # This should not happen, equal to isLoggedIn() == false
 }
 
 sub getAccessToken {
-  $log->debug('getAccessToken started.');
+	$log->debug('getAccessToken started.');
 
-  if (!isRefreshTokenAvailable()) {
-    $log->error('No authentication available. Use the settings page to log in first.');
-    return;
-  }
+	if (!isRefreshTokenAvailable()) {
+		$log->error('No authentication available. Use the settings page to log in first.');
+		return;
+	}
 
-  if (!isAccessTokenAvailable()) {
-    $log->info('Access token has expired. Getting a new access token with the refresh token.');
-    getAccessTokenWithRefreshToken(\&getAccessToken, @_);
-    return;
-  }
-  
-  $log->debug('Cached access token ' . $cache->get('access_token'));
-  return $cache->get('access_token');
+	if (!isAccessTokenAvailable()) {
+		$log->info('Access token has expired. Getting a new access token with the refresh token.');
+		getAccessTokenWithRefreshToken(\&getAccessToken, @_);
+		return;
+	}
+
+	$log->debug('Cached access token ' . $cache->get('access_token'));
+	return $cache->get('access_token');
 }
 
 sub getAuthorizationToken {
-  $log->debug('getAuthorizationToken started.');
+	$log->debug('getAuthorizationToken started.');
 
-  my $cb = shift;
-  my ($class, $client, $params, $callback, @args) = @_;
+	my $cb = shift;
+	my ($class, $client, $params, $callback, @args) = @_;
 
-  if (!$cache->get('codeVerifier')) {
-    $log->error('No code verifier is available. Reload the page and try to authenticate again.');
-    return;
-  }
+	if (!$cache->get('codeVerifier')) {
+		$log->error('No code verifier is available. Reload the page and try to authenticate again.');
+		return;
+	}
 
-  my $post = "grant_type=authorization_code" .
-    "&client_id=" . CLIENT_ID .
-    "&client_secret=" . CLIENT_SECRET .
-    "&redirect_uri=" . REDIRECT_URI .
-    "&code_verifier=" . $cache->get('codeVerifier') .
-    "&code=" . $params->{code};
+	my $post = 'grant_type=authorization_code' .
+		'&client_id=' . CLIENT_ID .
+		'&client_secret=' . CLIENT_SECRET .
+		'&redirect_uri=' . REDIRECT_URI .
+		'&code_verifier=' . $cache->get('codeVerifier') .
+		'&code=' . $params->{code};
 
-  my $http = Slim::Networking::SimpleAsyncHTTP->new(
-    sub {
-      $log->debug('Successful request for authorization_code.');
-      my $response = shift;
-      my $result = eval { from_json($response->content) };
-      
-      $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
+	my $http = Slim::Networking::SimpleAsyncHTTP->new(
+		sub {
+			$log->debug('Successful request for authorization_code.');
+			my $response = shift;
+			my $result = eval { from_json($response->content) };
+
+			$cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
 			$prefs->set('refresh_token', $result->{refresh_token});
-      delete $params->{code};
-      $cb->($class, $client, $params, $callback, @args) if $cb;
-    },
-    sub {
-      $log->error('Failed request for authorization_code.');
-      $log->error($_[1]);
+			delete $params->{code};
+			$cb->($class, $client, $params, $callback, @args) if $cb;
+		},
+		sub {
+			$log->error('Failed request for authorization_code.');
+			$log->error($_[1]);
 
-      my $response = shift;
-      my $result = eval { from_json($response->content) };
-      $log->error($result);
-    },
-    {
-      timeout => 15,
-    }
-  );
-  $log->debug($post);
-  $http->post(
-    "https://secure.soundcloud.com/oauth/token",
-    'Content-Type' => 'application/x-www-form-urlencoded',
-    $post,
-  );
+			my $response = shift;
+			my $result = eval { from_json($response->content) };
+			$log->error($result);
+		},
+		{
+			timeout => 15,
+		}
+	);
+	$log->debug($post);
+	$http->post(
+		'https://secure.soundcloud.com/oauth/token',
+		'Content-Type' => 'application/x-www-form-urlencoded',
+		$post,
+	);
 }
 
 sub getAccessTokenWithRefreshToken {
-  $log->debug('getAccessTokenWithRefreshToken started.');
+	$log->debug('getAccessTokenWithRefreshToken started.');
 
-  my $cb  = shift;
-  my @params = @_;
+	my $cb = shift;
+	my @params = @_;
 
-  if (!isRefreshTokenAvailable()) {
-    $log->error('No authentication available. Use the settings page to log in first.');
-    return;
-  }
+	if (!isRefreshTokenAvailable()) {
+		$log->error('No authentication available. Use the settings page to log in first.');
+		return;
+	}
 
-  if (isAccessTokenAvailable()) {
-    $log->debug('Still an access token available. No need for a refresh.');
-    return;
-  }
+	if (isAccessTokenAvailable()) {
+		$log->info('Access token is still valid. No need for a refresh.');
+		return;
+	}
 
-  my $post = "grant_type=refresh_token" .
-    "&client_id=" . CLIENT_ID .
-    "&client_secret=" . CLIENT_SECRET .
-    "&refresh_token=" . $cache->get('refresh_token');
 	$log->debug('Cached refresh token ' . $prefs->get('refresh_token'));
+	my $post = 'grant_type=refresh_token' .
+		'&client_id=' . CLIENT_ID .
+		'&client_secret=' . CLIENT_SECRET .
 		'&refresh_token=' . $prefs->get('refresh_token');
 
-  my $http = Slim::Networking::SimpleAsyncHTTP->new(
-    sub {
-      $log->debug('Successful request for refresh_token');
-      my $response = shift;
-      my $result = eval { from_json($response->content) };
-      $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
+	my $http = Slim::Networking::SimpleAsyncHTTP->new(
+		sub {
+			$log->debug('Successful request for refresh_token');
+			my $response = shift;
+			my $result = eval { from_json($response->content) };
+			$cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
 			$prefs->set('refresh_token', $result->{refresh_token});
-      $cb->(@params) if $cb;
-    },
-    sub {
-      $log->error('Failed request for refresh_token');
-      $log->error($_[1]);
+			$cb->(@params) if $cb;
+		},
+		sub {
+			$log->error('Failed request for refresh_token');
+			$log->error($_[1]);
 			$log->warn('Removing refresh_token upon failed request. You are now logged out. Complete the authorisation flow on the settings page again.');
 			$prefs->remove('refresh_token');
-      $cb->(@params) if $cb;
-    },
-    {
-      timeout => 15,
-    }
-  );
-  $log->debug($post);
-  $http->post(
-    "https://secure.soundcloud.com/oauth/token",
-    'Content-Type' => 'application/x-www-form-urlencoded',
-    $post,
-  );
+			$cb->(@params) if $cb;
+		},
+		{
+			timeout => 15,
+		}
+	);
+	$log->debug($post);
+	$http->post(
+		'https://secure.soundcloud.com/oauth/token',
+		'Content-Type' => 'application/x-www-form-urlencoded',
+		$post,
+	);
 }
 
 sub getAuthenticationHeaders {
-  $log->debug('getAuthenticationHeaders started.');
-  if (isApiKeyAvailable()) {
-    # If there is still an older API key, use this for authentication
-    $log->debug('Using old API key ' . $prefs->get('apiKey'));
-    return 'Authorization' => 'OAuth ' . $prefs->get('apiKey');
-  }
-  else {
-    $log->debug('Using bearer token for authorization');
-    return 'Authorization' => 'Bearer ' . getAccessToken();
-  }
+	$log->debug('getAuthenticationHeaders started.');
+	if (isApiKeyAvailable()) {
+		# If there is still an older API key, use this for authentication
+		$log->debug('Using old API key ' . $prefs->get('apiKey'));
+		return 'Authorization' => 'OAuth ' . $prefs->get('apiKey');
+	}
+	else {
+		$log->debug('Using OAuth 2.1 bearer token for authorization');
+		return 'Authorization' => 'Bearer ' . getAccessToken();
+	}
 }
 
 # This function generates random strings of a given length
@@ -199,12 +198,12 @@ sub generate_random_string
 }
 
 sub getCodeChallenge {
-  $log->debug('getCodeChallenge started.');
-  if ($cache->get('codeChallenge')) {
-    $log->debug('Random string [cached]: '. $cache->get('codeVerifier'));
-    $log->debug('S256 [cached]: '.$cache->get('codeChallenge'));
-    return $cache->get('codeChallenge');
-  }
+	$log->debug('getCodeChallenge started.');
+	if ($cache->get('codeChallenge')) {
+		$log->debug('Random string [cached]: '. $cache->get('codeVerifier'));
+		$log->debug('S256 [cached]: '.$cache->get('codeChallenge'));
+		return $cache->get('codeChallenge');
+	}
 
 	my $randomString = generate_random_string(56);
 	my $s256 = sha256_base64($randomString);
@@ -224,7 +223,7 @@ sub getCodeChallenge {
 	# A code generated by SoundCloud only seems to be valid for some time.
 	$cache->set('codeVerifier', $randomString, 300);
 	$cache->set('codeChallenge', $s256, 300);
-  return $s256;
+	return $s256;
 }
 
 1;
