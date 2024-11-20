@@ -4,7 +4,7 @@ package Plugins::SqueezeCloud::Plugin;
 #
 # Released under GNU General Public License version 2 (GPLv2)
 #
-# Written by David Blackman (first release), 
+# Written by David Blackman (first release),
 #   Robert Gibbon (improvements),
 #   Daniel Vijge (improvements),
 #   Robert Siebert (improvements),
@@ -30,6 +30,7 @@ use Slim::Utils::Strings qw(string cstring);
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 use Plugins::SqueezeCloud::Oauth2;
+
 # Defines the timeout in seconds for a http request
 use constant HTTP_TIMEOUT => 15;
 
@@ -50,12 +51,12 @@ use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
 
 use IO::Socket::SSL;
 IO::Socket::SSL::set_defaults(
-	SSL_verify_mode => Net::SSLeay::VERIFY_NONE() 
+	SSL_verify_mode => Net::SSLeay::VERIFY_NONE()
 ) if preferences('server')->get('insecureHTTPS');
 
 my $log;
 my $compat;
-my $cache;
+my $cache = Slim::Utils::Cache->new('squeezecloud');
 my $prefix = 'sc:';
 
 # This is the entry point in the script
@@ -65,9 +66,9 @@ BEGIN {
 		'category'     => 'plugin.squeezecloud',
 		'defaultLevel' => 'WARN',
 		'description'  => string('PLUGIN_SQUEEZECLOUD'),
-	});   
+	});
 
-	# Always use OneBrowser version of XMLBrowser by using server or packaged 
+	# Always use OneBrowser version of XMLBrowser by using server or packaged
 	# version included with plugin
 	if (exists &Slim::Control::XMLBrowser::findAction) {
 		$log->info("using server XMLBrowser");
@@ -81,61 +82,59 @@ BEGIN {
 	}
 }
 
-# Get the data related to this plugin and preset certain variables with 
+# Get the data related to this plugin and preset certain variables with
 # default values in case they are not set
 my $prefs = preferences('plugin.squeezecloud');
-$prefs->init({ apiKey => "", playmethod => "stream" });
+$prefs->init({ refresh_token => "", playmethod => "stream" });
 
 # This is called when squeezebox server loads the plugin.
 # It is used to initialize variables and the like.
 sub initPlugin {
 	$log->debug('initPlugin started.');
-    my $class = shift;
-	
-	$cache = Slim::Utils::Cache->new('squeezecloud', $class->_pluginDataFor('cacheVersion'));
-	
-    # Initialize the plugin with the given values. The 'feed' is the first
-    # method called. The available menu entries will be shown in the new 
-    # menu entry 'soundcloud'. 
-    $class->SUPER::initPlugin(
-        feed   => \&toplevel,
-        tag    => 'squeezecloud',
-        menu   => 'radios',
-        is_app => $class->can('nonSNApps') ? 1 : undef,
-        weight => 10,
-    );
-	
+	my $class = shift;
+
+	# Initialize the plugin with the given values. The 'feed' is the first
+	# method called. The available menu entries will be shown in the new
+	# menu entry 'soundcloud'.
+	$class->SUPER::initPlugin(
+		feed   => \&toplevel,
+		tag    => 'squeezecloud',
+		menu   => 'radios',
+		is_app => $class->can('nonSNApps') ? 1 : undef,
+		weight => 10,
+	);
+
 	# clear the cache when user enters an apiKey
 	$prefs->setChange(sub {
 		my ($pref, $new, $obj, $old) = @_;
 		$cache->clear;
 	}, 'apiKey');
 
-    if (!$::noweb) {
-        require Plugins::SqueezeCloud::Settings;
-        Plugins::SqueezeCloud::Settings->new;
-    }
+	if (!$::noweb) {
+		require Plugins::SqueezeCloud::Settings;
+		Plugins::SqueezeCloud::Settings->new;
+	}
 
-    Slim::Formats::RemoteMetadata->registerProvider(
-        match => qr/soundcloud\.com/,
-        func => \&metadata_provider,
-    );
+	Slim::Formats::RemoteMetadata->registerProvider(
+		match => qr/soundcloud\.com/,
+		func => \&metadata_provider,
+	);
 
-    Slim::Player::ProtocolHandlers->registerHandler(
-        soundcloud => 'Plugins::SqueezeCloud::ProtocolHandler'
-    );
+	Slim::Player::ProtocolHandlers->registerHandler(
+		soundcloud => 'Plugins::SqueezeCloud::ProtocolHandler'
+	);
 
 	Slim::Player::ProtocolHandlers->registerURLHandler(
-	    PAGE_URL_REGEXP() => 'Plugins::SqueezeCloud::ProtocolHandler'
+		PAGE_URL_REGEXP() => 'Plugins::SqueezeCloud::ProtocolHandler'
 	) if Slim::Player::ProtocolHandlers->can('registerURLHandler');
-	
+
 	$log->debug('initPlugin ended.');
 }
 
 # Called when the plugin is stopped
 sub shutdownPlugin {
 	$log->debug('shutdownPlugin started.');
-    my $class = shift;
+	my $class = shift;
 }
 
 # Returns the name to display on the squeezebox
@@ -146,49 +145,49 @@ sub getDisplayName { 'PLUGIN_SQUEEZECLOUD' }
 sub defaultMeta {
 	$log->debug('defaultMeta started.');
 	my ( $client, $url ) = @_;
-	
+
 	return {
 		title => Slim::Music::Info::getCurrentTitle($url)
 	};
-	
+
 	$log->debug('defaultMeta ended.');
 }
 
-# Extracts the available metadata for a tracks from the JSON data. The data 
-# is cached and then returned to be presented to the user. 
+# Extracts the available metadata for a tracks from the JSON data. The data
+# is cached and then returned to be presented to the user.
 sub _makeMetadata {
 	$log->debug('_makeMetadata started.');
 	my ($client, $json, $args) = @_;
-	
+
 	# this is ugly... for whatever reason the EN/Classic skins can't handle tracks with an items element
 	# The protocol handler cannot handle tracks with an item element either...
 	my $simpleTracks = ($args->{params} && (($args->{params}->{isWeb} && preferences('server')->get('skin')=~ /Classic|EN/i) || $args->{params}->{isProtocolHandler})) ? 1 : 0;
-	
+
 	my $isFromCache = ($args->{params} && $args->{params}->{isFromCache});
-											 
-    # Get the icon from the artwork_url.
-    # Get the 500x500 high quality version, as specified in SoundCloud API.
+
+	# Get the icon from the artwork_url.
+	# Get the 500x500 high quality version, as specified in SoundCloud API.
 	my $icon = "";
 	if (defined $json->{'artwork_url'}) {
 		$icon = $json->{'artwork_url'};
 		$icon =~ s/-large/-t500x500/g;
 	}
-		
+
 	my $trackinfo = [];
-	
+
 	my $duration;
 	if ($json->{'duration'}) {
-        $duration = $json->{'duration'} / 1000;
+		$duration = $json->{'duration'} / 1000;
 		$duration = sprintf('%s:%02s', int($duration / 60), int($duration % 60));
 	}
-	
+
 	my $year;
 	if (int($json->{'release_year'}) > 0) {
 		$year = int($json->{'release_year'});
 	} elsif ($json->{'created_at'}) {
 		$year = substr $json->{'created_at'}, 0, 4;
 	}
-	
+
 	push @$trackinfo, {
 		name => cstring($client, 'LENGTH') . cstring($client, 'COLON') . ' ' . $duration,
 		type => 'text',
@@ -204,7 +203,7 @@ sub _makeMetadata {
 		name => string('PLUGIN_SQUEEZECLOUD_LINK') . cstring($client, 'COLON') . ' ' . $json->{'permalink_url'},
 		type => 'text',
 	} if $json->{'permalink_url'};
-	
+
 	push @$trackinfo, {
 		type => 'link',
 		name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $json->{'user'}->{'username'},
@@ -219,7 +218,7 @@ sub _makeMetadata {
 		passthrough => [ { id => $json->{'id'}, type => 'releated', parser => \&_parseTracks } ]
 	} if $json->{'user'}->{'id'};
 
-	if ($json->{'user_favorite'} ne 1) {	
+	if ($json->{'user_favorite'} ne 1) {
 		push @$trackinfo, {
 			type => 'link',
 			name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'),
@@ -234,14 +233,14 @@ sub _makeMetadata {
 			passthrough => [ { id => $json->{'id'}, type => 'text', parser => \&_parseTracks } ]
 		};
 	}
-	
+
 	my $DATA;
 	if ($simpleTracks) {
 		$log->debug('_makeMetadata simpleTracks used.');
 		$DATA = {
 			id => $json->{'id'},
 			duration => $json->{'duration'} / 1000,
-			name => $json->{'title'},            
+			name => $json->{'title'},
 			title => $json->{'title'},
 			artist => $json->{'user'}->{'username'},
 			album => "SoundCloud",
@@ -287,14 +286,14 @@ sub _makeMetadata {
 			}]
 		}
 	}
- 
+
 	if (!$isFromCache) {
 		# Re-write the cache data here to reset TTL but also because it might not be complete and it might have changed.
 		_cacheWriteTrack($DATA);
-    }
-    	
+	}
+
 	$log->debug('_makeMetadata ended.');
-	
+
 	return \%$DATA;
 }
 
@@ -302,7 +301,7 @@ sub _cacheWriteTrack {
 	$log->debug('_cacheWriteTrack started.');
 	my ($track) = @_;
 	my $searchType = 'track';
-	$log->debug('_cacheWriteTrack ID: ' . $track->{'id'});	
+	$log->debug('_cacheWriteTrack ID: ' . $track->{'id'});
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-duration', $track->{'duration'} * 1000, META_CACHE_TTL);
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-name', encode_utf8($track->{'name'}), META_CACHE_TTL);
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-artist', encode_utf8($track->{'artist'}), META_CACHE_TTL);
@@ -322,7 +321,7 @@ sub _cacheReadTrack {
 	$track{name} = $cache->get($prefix . $searchType . '-' . $id . '-name');
 	$track{title} = decode_utf8($track{name});
 	$track{artist} = decode_utf8($cache->get($prefix . $searchType . '-' . $id . '-artist'));
-	$track{user} = {username  => $track{artist}};
+	$track{user} = {username => $track{artist}};
 	$track{artwork_url} = $cache->get($prefix . $searchType . '-' . $id . '-artwork_url');
 	$track{bpm} = $cache->get($prefix . $searchType . '-' . $id . '-bpm');
 	$track{year} = $cache->get($prefix . $searchType . '-' . $id . '-year');
@@ -339,18 +338,18 @@ sub likeTrack {
 	my $method = "https";
 	my $id = $passDict->{'id'} || '';
 	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
-    $log->debug("Liking: $url");
+	$log->debug("Liking: $url");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likeTrack, @_);
-    	return;
-    }
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likeTrack, @_);
+		return;
+	}
 
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Like Track Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'), type => 'text' } ]);
@@ -358,12 +357,12 @@ sub likeTrack {
 			$log->warn("Like Track Error: " . $response->status_line());
 			$callback->([ { name => $response->status_line(), type => 'text' } ]);
 		}
-		
+
 		# $log->debug('response: ' . $response->as_string);
 	};
-	
+
 	$fetch->();
-	
+
 	$log->debug('likeTrack ended.');
 }
 
@@ -374,18 +373,18 @@ sub unlikeTrack {
 	my $method = "https";
 	my $id = $passDict->{'id'} || '';
 	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
-    $log->debug("Unliking: $url");
+	$log->debug("Unliking: $url");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikeTrack, @_);
-    	return;
-    }
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikeTrack, @_);
+		return;
+	}
 
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Unlike Track Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNLIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'), type => 'text' } ]);
@@ -393,39 +392,39 @@ sub unlikeTrack {
 			$log->warn("Unlike Track Error: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_TRACK') . name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
 		}
-		
+
 		#$log->debug('response: ' . $response->as_string);
 	};
-		
+
 	$fetch->();
-	
+
 	$log->debug('unlikeTrack ended.');
 }
 
-# This method is called when the Slim::Networking::SimpleAsyncHTTP encountered 
-# an error or no http repsonse was received. 
+# This method is called when the Slim::Networking::SimpleAsyncHTTP encountered
+# an error or no http repsonse was received.
 sub _gotMetadataError {
 	$log->debug('_gotMetadataError started.');
 	my $http   = shift;
 	my $client = $http->params('client');
 	my $url    = $http->params('url');
 	my $error  = $http->error;
-	
+
 	$log->is_debug && $log->debug( "Error fetching Web API metadata: $error" );
-	
+
 	$client->master->pluginData( webapifetchingMeta => 0 );
-	
+
 	# To avoid flooding the SoundCloud servers in the case of errors, we just ignore further
 	# metadata for this track if we get an error
 	my $meta = defaultMeta( $client, $url );
 	$meta->{_url} = $url;
-	
+
 	$client->master->pluginData( webapimetadata => $meta );
-	
+
 	$log->debug('_gotMetadataError ended.');
 }
 
-# This method is called when the Slim::Networking::SimpleAsyncHTTP 
+# This method is called when the Slim::Networking::SimpleAsyncHTTP
 # method has received a http response.
 sub _gotMetadata {
 	$log->debug('_gotMetadata started.');
@@ -434,7 +433,7 @@ sub _gotMetadata {
 	my $url       = $http->params('url');
 	my $content   = $http->content;
 
-    # Check if there is an error message from the last eval() operator
+	# Check if there is an error message from the last eval() operator
 	if ( $@ ) {
 		$http->error( $@ );
 		_gotMetadataError( $http );
@@ -442,11 +441,11 @@ sub _gotMetadata {
 	}
 
 	$client->master->pluginData( webapifetchingMeta => 0 );
-		
+
 	my $json = eval { from_json($content) };
 	my $user_name = $json->{'user'}->{'username'};
 
-	#  _gotMetadata is only called from ProtocolHandler and cannot handle track items.
+	# _gotMetadata is only called from ProtocolHandler and cannot handle track items.
 	my $args = { params => {isProtocolHandler => 1}};
 
 	my $DATA = _makeMetadata($client, $json, $args );
@@ -458,17 +457,17 @@ sub _gotMetadata {
 	my $res = $ua->get( getStreamURL($json), Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
 	my $stream = $res->header( 'location' );
-	
+
 	$log->debug('_gotMetadata ended.');
 
 	return;
 }
 
-# Returns either the stream URL or the download URL from the given JSON data. 
+# Returns either the stream URL or the download URL from the given JSON data.
 sub getStreamURL {
 	$log->debug('getStreamURL started.');
 	my $json = shift;
-	
+
 	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
 		$log->debug('download_url: ' . $json->{'download_url'});
 		return $json->{'download_url'};
@@ -482,7 +481,7 @@ sub getStreamURL {
 sub fetchMetadata {
 	$log->debug('fetchMetadata started.');
 	my ( $client, $url ) = @_;
-	
+
 	if ($url =~ /soundcloud\:\/\/(.*)/i) {
 		my $resource = 'tracks/' . $1;
 		my $method = "https";
@@ -490,16 +489,16 @@ sub fetchMetadata {
 		my $params .= "";
 		my $extras = "linked_partitioning=true&limit=1";
 		my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params;
-		
+
 		if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&fetchMetadata, @_);
 			return;
 		}
 
-        # Call the server to fetch the data via the asynchronous http request. 
-        # The methods are called when a response was received or an error 
-        # occurred. Additional information to the http call is passed via 
-        # the hash (third parameter).
+		# Call the server to fetch the data via the asynchronous http request.
+		# The methods are called when a response was received or an error
+		# occurred. Additional information to the http call is passed via
+		# the hash (third parameter).
 		my $http = Slim::Networking::SimpleAsyncHTTP->new(
 			\&_gotMetadata,
 			\&_gotMetadataError,
@@ -512,7 +511,7 @@ sub fetchMetadata {
 
 		$http->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	}
-	
+
 	$log->debug('fetchMetadata ended.');
 }
 
@@ -526,33 +525,33 @@ sub _parseTracks {
 			push @$menuEntries, _makeMetadata($client, $entry);
 		}
 	}
-	
-	return $menuEntries;	
+
+	return $menuEntries;
 	$log->debug('_parseTracks ended.');
 }
 
-# Main method that is called when the user selects a menu item. It is 
-# specified in the menu array by the key 'url'. The passthrough array 
-# contains the additional values that is passed to this method to 
+# Main method that is called when the user selects a menu item. It is
+# specified in the menu array by the key 'url'. The passthrough array
+# contains the additional values that is passed to this method to
 # differentiate what shall be done in here.
 sub tracksHandler {
 	$log->debug('tracksHandler started.');
 	my ($client, $callback, $args, $passDict) = @_;
 
-    # Get the index (offset) where to start fetching items
+	# Get the index (offset) where to start fetching items
 	my $index = ($args->{'index'} || 0); # ie, offset
-	my $menu = [];    
-	
+	my $menu = [];
+
 	# The number of items to fetch, either specified in arguments or the maximum possible.
 	my $pageSize = min(API_MAX_ITEMS_PER_CALL || API_MAX_ITEMS);
 	my $quantity = API_MAX_ITEMS;
 
 	my $searchType = $passDict->{'type'};
 	my $searchStr = ($searchType eq 'tags') ? "tags=" : "q=";
-	my $search   = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
+	my $search = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
 
-    # The parser is the method that will be called when the 
-    # server has returned some data in the SimpleAsyncHTTP call.
+	# The parser is the method that will be called when the
+	# server has returned some data in the SimpleAsyncHTTP call.
 	my $parser = $passDict->{'parser'} || \&_parseTracks;
 
 	my $params = $passDict->{'params'} || '';
@@ -560,14 +559,14 @@ sub tracksHandler {
 	my $method = "https";
 	my $uid = $passDict->{'uid'} || '';
 
-	# If this is set to one then the user has provided the API key. This 
+	# If this is set to one then the user has provided the API key. This
 	# is the case when the menu item in the toplevel method are active.
 	my $authenticated = 0;
 	my $extras = '';
 	my $resource;
-	
-	# Check the given type (defined by the passthrough array). Depending 
-	# on the type certain URL parameters will be set. 
+
+	# Check the given type (defined by the passthrough array). Depending
+	# on the type certain URL parameters will be set.
 	if ($searchType eq 'playlists') {
 		my $id = $passDict->{'pid'} || '';
 		$authenticated = 1;
@@ -603,7 +602,7 @@ sub tracksHandler {
 		$authenticated = 1;
 		$resource = "tracks/$id/related";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
-		
+
 	} elsif ($searchType eq 'favorites') {
 		$authenticated = 1;
 		$resource = "users/$uid/likes/tracks";
@@ -635,7 +634,7 @@ sub tracksHandler {
 		# $quantity = API_DEFAULT_ITEMS_COUNT;
 		$resource = "me/activities";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
-		
+
 	} else {
 		$resource = "tracks";
 		# Override maximum quantity
@@ -647,20 +646,20 @@ sub tracksHandler {
 		}
 		$extras = "linked_partitioning=true&limit=" . $quantity;
 	}
-	
-	my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params . "&" . $search;	
+
+	my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params . "&" . $search;
 
 	$log->debug("fetching: " . $queryUrl);
-	
+
 	_getTracks($client, $searchType, $index, $quantity, $queryUrl, $uid, 0, $parser, $callback, $menu);
-	
+
 	$log->debug('tracksHandler ended.');
 }
 
 sub _getTracks {
 	$log->debug('_getTracks started.');
 	my ($client, $searchType, $index, $quantity, $queryUrl, $uid, $cursor, $parser, $callback, $menu) = @_;
-	
+
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&_getTracks, @_);
 		return;
@@ -673,56 +672,56 @@ sub _getTracks {
 			my $json = eval { from_json($http->content) };
 			my $next_href = $json->{'next_href'} || '';
 			my $returnedMenu = [];
-	
+
 			$returnedMenu = $parser->($client, $json);
 
 			for my $entry (@$returnedMenu) {
 				push @$menu, $entry;
 			};
-			
+
 			my $total = scalar @$menu;
-			
+
 			# Queries that uses pagesize need the recursion to be terminated before next_href is empty. (first half of if-statement)
 			# Queries that accept the limit parameter do not need the recursion terminated early. (second half of if-statement)
 			if ((($searchType ne 'tracks' || $searchType ne 'activities' || $searchType ne 'related' || $searchType ne 'tags' || !defined($searchType))
 				 && ($total >= $quantity || $total % $quantity != 0)) ||
 				($next_href eq '')) {
-				
+
 				if ($searchType eq 'friends') {
 					# Sort by UID
-                    # $menu = [ sort { ($a->{passthrough}->[0]->{'uid'}) <=> ($b->{passthrough}->[0]->{'uid'}) } @$menu ];
+					# $menu = [ sort { ($a->{passthrough}->[0]->{'uid'}) <=> ($b->{passthrough}->[0]->{'uid'}) } @$menu ];
 					# Sort by Name.
 					$menu = [ sort { uc($a->{name}) cmp uc($b->{name}) } @$menu ];
-                }
-				
+				}
+
 				my $i = 1;
-				if ($searchType eq 'tracks') {	
+				if ($searchType eq 'tracks') {
 					for my $entry (@$menu) {
 						_cacheWriteTrack($entry);
 						$i++;
 					}
-				
+
 					# Store the total in the cache last so that this is the last TTL to expire.
 					# If the total is in the cache then all the data should still be cached.
 					$cache->set($prefix . $searchType . $uid . '-' . '-total', ($total), META_CACHE_TTL);
 				}
 
 				_callbackTracks($menu, $index, $quantity, $callback);
-				
-            } else {
+
+			} else {
 				$cursor = $total + 1;
 				_getTracks($client, $searchType, $index, $quantity, $next_href, $uid, $cursor, $parser, $callback, $menu);
 			}
-            
+
 		},
 		# Called when no response was received or an error occurred.
 		sub {
 			$log->warn("error: $_[1]");
 			$callback->([ { name => $_[1], type => 'text' } ]);
 		},
-		
+
 	)->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-	
+
 	$log->debug('_getTracks ended.');
 }
 
@@ -732,27 +731,27 @@ sub _callbackTracks {
 
 	my $total = scalar @$menu;
 	if ($quantity ne 1) {
-        $quantity = min($quantity, $total - $index);
-    }	
-	
+		$quantity = min($quantity, $total - $index);
+	}
+
 	my $returnMenu = [];
-	
+
 	my $i = 0;
 	my $count = 0;
 	for my $entry (@$menu) {
 		if ($i >= $index && $count < $quantity) {
-            push @$returnMenu, $entry;
+			push @$returnMenu, $entry;
 			$count++;
-        }
+		}
 		$i++;
 	}
-	
+
 	$callback->({
 		items  => $returnMenu,
 		offset => $index,
 		total  => $total,
 	});
-    $log->debug('_callbackTracks ended.');
+	$log->debug('_callbackTracks ended.');
 }
 
 sub metadata_provider {
@@ -762,50 +761,50 @@ sub metadata_provider {
 	my $id = track_key($url);
 	my $searchType = 'track';
 	if ( $cache->get($prefix . $searchType . '-' . $id)) {
-        $log->debug('Metadata cache hit on ID: ' . $id);
+		$log->debug('Metadata cache hit on ID: ' . $id);
 		my $params = $args->{params};
 		$params->{isFromCache} = 1;
 		$args->{params} = $params;
 		return _makeMetadata($client, _cacheReadTrack($id), $args);
-    } else {
+	} else {
 		$log->debug('Metadata cache miss. Fetching: ' . $id);
 		if ( !$client->master->pluginData('webapifetchingMeta') ) {
-			# The fetchMetadata method will invoke an asynchronous http request. This will 
-			# start a timer that is linked with the method fetchMetadata. Kill any pending 
-			# or running request that is already active for the fetchMetadata method. 
+			# The fetchMetadata method will invoke an asynchronous http request. This will
+			# start a timer that is linked with the method fetchMetadata. Kill any pending
+			# or running request that is already active for the fetchMetadata method.
 			Slim::Utils::Timers::killTimers( $client, \&fetchMetadata );
-	
+
 			# Start fetching new metadata in the background
 			$client->master->pluginData( webapifetchingMeta => 1 );
 			fetchMetadata( $client, $url );
 		};
 	}
-	
+
 	$log->debug('metadata_provider ended.');
-	
+
 	return { };
 }
 
-# This method is called when the user has selected the last main menu where 
-# an URL can be entered manually. It will assemble the given URL and fetch 
+# This method is called when the user has selected the last main menu where
+# an URL can be entered manually. It will assemble the given URL and fetch
 # the data from the server.
 sub urlHandler {
 	$log->debug('urlHandler started.');
 	my ($client, $callback, $args) = @_;
-	
+
 	my $url = $args->{'search'};
 
 	# Remove mobile website prefix
 	$url =~ s/\/\/m./\/\//;
-	
+
 	$url = URI::Escape::uri_escape_utf8($url);
 	my $queryUrl = "https://api.soundcloud.com/resolve?url=$url";
-    $log->debug("fetching: $queryUrl");
+	$log->debug("fetching: $queryUrl");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&urlHandler, @_);
-    	return;
-    }
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&urlHandler, @_);
+		return;
+	}
 
 	my $fetch = sub {
 		Slim::Networking::SimpleAsyncHTTP->new(
@@ -827,29 +826,29 @@ sub urlHandler {
 			},
 		)->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	};
-		
+
 	$fetch->();
-	
+
 	$log->debug('urlHandler ended.');
 }
 
-# Get the tracks data from the JSON array and passes it to the parseTracks 
+# Get the tracks data from the JSON array and passes it to the parseTracks
 # method which will then add a menu item for each track
 sub _parsePlaylistTracks {
 	$log->debug('_parsePlaylistTracks started.');
 	my ($client, $json) = @_;
 	my $menuEntries = [];
-	
+
 	$log->debug('sizesize: ' . scalar @{$json->{'tracks'}});
-	
+
 	for my $entry (@{$json->{'tracks'}}) {
 		if ($entry->{'streamable'}) {
 			push @$menuEntries, _makeMetadata($client, $entry);
 		}
 	}
-	
+
 	# Get the icon from the artwork_url. If no url is defined, set the default icon.
-    my $icon = '/html/images/favorites.png';
+	my $icon = '/html/images/favorites.png';
 	push @$menuEntries, {
 		type => 'link',
 		name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLIST'),
@@ -859,7 +858,7 @@ sub _parsePlaylistTracks {
 		cover => $icon,
 		passthrough => [ { pid => $json->{'id'}, type => 'text', parser => \&_parsePlaylist } ]
 	};
-	
+
 	$icon = '/html/images/favorites_remove.png';
 	push @$menuEntries, {
 		type => 'link',
@@ -871,9 +870,9 @@ sub _parsePlaylistTracks {
 		passthrough => [ { pid => $json->{'id'}, type => 'text', parser => \&_parsePlaylist } ]
 	};
 
-	
-	return $menuEntries;	
-	$log->debug('_parsePlaylistTracks ended.');	
+
+	return $menuEntries;
+	$log->debug('_parsePlaylistTracks ended.');
 }
 
 
@@ -884,18 +883,18 @@ sub likePlaylist {
 	my $method = "https";
 	my $id = $passDict->{'pid'} || '';
 	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
-    $log->debug("Liking: $url");
+	$log->debug("Liking: $url");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likePlaylist, @_);
-    	return;
-    }
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likePlaylist, @_);
+		return;
+	}
 
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Like Playlist Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKED'), type => 'text' } ]);
@@ -903,12 +902,12 @@ sub likePlaylist {
 			$log->warn("Like Playlist Error: " . $response->status_line());
 			$callback->([ { name => $response->status_line(), type => 'text' } ]);
 		}
-		
+
 		# $log->debug('response: ' . $response->as_string);
 	};
-	
+
 	$fetch->();
-	
+
 	$log->debug('likePlaylist ended.');
 }
 
@@ -919,45 +918,45 @@ sub unlikePlaylist {
 	my $method = "https";
 	my $id = $passDict->{'pid'} || '';
 	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
-    $log->debug("Unliking: $url");
+	$log->debug("Unliking: $url");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikePlaylist, @_);
-    	return;
-    }
-	
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikePlaylist, @_);
+		return;
+	}
+
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Unlike Playlist Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNLIKED'), type => 'text' } ]);
 		} else {
 			$log->warn("Unlike Playlist Error: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);		
+			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
 		}
-		
+
 		#$log->debug('response: ' . $response->as_string);
 	};
-		
+
 	$fetch->();
-	
+
 	$log->debug('unlikePlaylist ended.');
 }
 
-# Gets more information for the given playlist from the passed data and  
-# returns the menu item for it. 
+# Gets more information for the given playlist from the passed data and
+# returns the menu item for it.
 sub _parsePlaylist {
 	$log->debug('_parsePlaylist started.');
 	my ($client, $entry) = @_;
 	my $menuEntry = [];
-	
+
 	# Add information about the track count to the playlist menu item
 	my $numTracks = 0;
 	my $titleInfo = "";
-	
+
 	# Add year
 	my $year;
 	if (int($entry->{'release_year'}) > 0) {
@@ -968,35 +967,35 @@ sub _parsePlaylist {
 	if ($year) {
 		$titleInfo .= $year . ' ';
 	}
-	
+
 	if (exists $entry->{'tracks'} || exists $entry->{'track_count'}) {
 		$numTracks = exists $entry->{'tracks'} ? scalar(@{$entry->{'tracks'}}) : scalar($entry->{'track_count'});
 		if ($numTracks eq 1) {
-            $titleInfo .= "$numTracks " . lc(string('PLUGIN_SQUEEZECLOUD_TRACK'));
-        } else {
+			$titleInfo .= "$numTracks " . lc(string('PLUGIN_SQUEEZECLOUD_TRACK'));
+		} else {
 			$titleInfo .= "$numTracks " . lc(string('PLUGIN_SQUEEZECLOUD_TRACKS'));
 		}
 	}
 
-    # Add information about the playlist play time
+	# Add information about the playlist play time
 	my $totalSeconds = ($entry->{'duration'} || 0) / 1000;
 	if ($totalSeconds != 0) {
 		$titleInfo .= ' ' . sprintf('%s:%02s', int($totalSeconds / 60), $totalSeconds % 60);
 	}
-	
-    # Get the icon from the artwork_url. If no url is defined, set the default icon.
-	# Shared playlists have a null artwork_url which SoundCloud might fix at some future date.
-    my $icon = "";
-    if (defined $entry->{'artwork_url'}) {
-        $icon = $entry->{'artwork_url'};
-        $icon =~ s/-large/-t500x500/g;
-    }
 
-    # Get the title and add the additional information to it
-    my $title = $entry->{'title'};
+	# Get the icon from the artwork_url. If no url is defined, set the default icon.
+	# Shared playlists have a null artwork_url which SoundCloud might fix at some future date.
+	my $icon = "";
+	if (defined $entry->{'artwork_url'}) {
+		$icon = $entry->{'artwork_url'};
+		$icon =~ s/-large/-t500x500/g;
+	}
+
+	# Get the title and add the additional information to it
+	my $title = $entry->{'title'};
 	if ($titleInfo) {
-        $title .= " ($titleInfo)";
-    }
+		$title .= " ($titleInfo)";
+	}
 
 	# Create the menu array
 	$menuEntry = {
@@ -1006,13 +1005,13 @@ sub _parsePlaylist {
 		url => \&tracksHandler,
 		passthrough => [ { type => 'playlists', pid => $entry->{'id'}, parser => \&_parsePlaylistTracks }],
 	};
-	
+
 	$log->debug('_parsePlaylist ended.');
-	
+
 	return $menuEntry;
 }
 
-# Parses the available playlists from the JSON array and gets the information 
+# Parses the available playlists from the JSON array and gets the information
 # for each playlist. Each playlist will be added as a separate menu entry.
 sub _parsePlaylists {
 	$log->debug('_parsePlaylists started.');
@@ -1022,13 +1021,13 @@ sub _parsePlaylists {
 	for my $entry (@{$json->{'collection'}}) {
 		push @$menuEntries, _parsePlaylist($client, $entry);
 	};
-	
+
 	return $menuEntries;
 	$log->debug('_parsePlaylists ended.');
 }
 
-# Shows the three available menu entries favorites, tracks and playlists 
-# with the received count information for a selected friend. 
+# Shows the three available menu entries favorites, tracks and playlists
+# with the received count information for a selected friend.
 sub _parseFriend {
 	$log->debug('_parseFriend started.');
 	my ($client, $entry) = @_;
@@ -1042,40 +1041,40 @@ sub _parseFriend {
 	my $id = $entry->{'id'};
 
 	if ($favorite_count > 0) {
-        push @$menuEntries, {
-    		name => string('PLUGIN_SQUEEZECLOUD_FAVORITES'),
-    		type => 'playlist',
-    		url => \&tracksHandler,
-    		passthrough => [ { type => 'favorites', uid => $id, max => $favorite_count }],
-    	};
-    }
+		push @$menuEntries, {
+			name => string('PLUGIN_SQUEEZECLOUD_FAVORITES'),
+			type => 'playlist',
+			url => \&tracksHandler,
+			passthrough => [ { type => 'favorites', uid => $id, max => $favorite_count }],
+		};
+	}
 
 	if ($track_count > 0) {
-        push @$menuEntries, {
-    		name => string('PLUGIN_SQUEEZECLOUD_TRACKS'),
-    		type => 'playlist',
-    		url => \&tracksHandler,
-    		passthrough => [ { type => 'tracks', uid => $id, max => $track_count }],
-    	};
-    }
-	
+		push @$menuEntries, {
+			name => string('PLUGIN_SQUEEZECLOUD_TRACKS'),
+			type => 'playlist',
+			url => \&tracksHandler,
+			passthrough => [ { type => 'tracks', uid => $id, max => $track_count }],
+		};
+	}
+
 	if ($playlist_count > 0) {
-        push @$menuEntries, {
-    		name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'),
-    		type => 'link',
-    		url => \&tracksHandler,
-    		passthrough => [ { type => 'playlists', uid => $id, max => $playlist_count,
-    		parser => \&_parsePlaylists } ]
-    	};
-    }
-	
+		push @$menuEntries, {
+			name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'),
+			type => 'link',
+			url => \&tracksHandler,
+			passthrough => [ { type => 'playlists', uid => $id, max => $playlist_count,
+			parser => \&_parsePlaylists } ]
+		};
+	}
+
 	push @$menuEntries, {
 		type => 'link',
 		name => string('PLUGIN_SQUEEZECLOUD_FOLLOW'),
 		url  => \&followFriend,
 		passthrough => [ { uid => $id, type => 'friend', parser => \&_parseFriend } ]
 	};
-	
+
 	push @$menuEntries, {
 		type => 'link',
 		name => string('PLUGIN_SQUEEZECLOUD_UNFOLLOW'),
@@ -1083,9 +1082,9 @@ sub _parseFriend {
 		passthrough => [ { uid => $id, type => 'text', parser => \&_parseFriend } ]
 	};
 
-	
+
 	$log->debug('_parseFriend ended.');
-	
+
 	return $menuEntries;
 }
 
@@ -1096,30 +1095,30 @@ sub followFriend {
 	my $method = "https";
 	my $uid = $passDict->{'uid'} || '';
 	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
-    $log->debug("Following: $url");
+	$log->debug("Following: $url");
 
-    if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-    	Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&followFriend, @_);
-    	return;
-    }
+	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&followFriend, @_);
+		return;
+	}
 
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Follow Friend Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_FOLLOWED'), type => 'text' } ]);
 		} else {
 			$log->warn("Follow Friend Error: " . $response->status_line());
 			# $callback->([ { name => $response->status_line(), type => 'text' } ]);
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_ARTIST') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);	
+			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_ARTIST') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
 		}
 	};
-		
+
 	$fetch->();
-	
+
 	$log->debug('followFriend ended.');
 }
 
@@ -1130,7 +1129,7 @@ sub unfollowFriend {
 	my $method = "https";
 	my $uid = $passDict->{'uid'} || '';
 	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
-    $log->debug("Unfollowing: $url");
+	$log->debug("Unfollowing: $url");
 
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unfollowFriend, @_);
@@ -1140,8 +1139,8 @@ sub unfollowFriend {
 	my $fetch = sub {
 		my $ua = LWP::UserAgent->new;
 		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response =  $ua->request($request);
-		
+		my $response = $ua->request($request);
+
 		if ( $response->is_success() ) {
 			$log->warn("Unfollow Friend Success: " . $response->status_line());
 			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNFOLLOWED'), type => 'text' } ]);
@@ -1152,17 +1151,17 @@ sub unfollowFriend {
 			$log->warn("Unfollow Friend Error: " . $response->status_line());
 			$callback->([ { name => $response->status_line(), type => 'text' } ]);
 		}
-		
+
 		# $log->debug('response: ' . $response->as_string);
 	};
-		
+
 	$fetch->();
-	
+
 	$log->debug('unfollowFriend ended.');
 }
 
-# Goes through the list of available friends from the JSON data and parses the 
-# information for each friend (which is defined in the parseFriend method). 
+# Goes through the list of available friends from the JSON data and parses the
+# information for each friend (which is defined in the parseFriend method).
 # Each friend is added as a separate menu entry.
 sub _parseFriends {
 	$log->debug('_parseFriends started.');
@@ -1173,8 +1172,8 @@ sub _parseFriends {
 		my $image = $entry->{'avatar_url'};
 		my $name = $entry->{'username'} || $entry->{'full_name'};
 		my $id = $entry->{'id'};
-		
-        # Add the menu entry with the information for one friend.
+
+		# Add the menu entry with the information for one friend.
 		push @$menuEntries, {
 			name => $name,
 			icon => $image,
@@ -1184,89 +1183,89 @@ sub _parseFriends {
 			passthrough => [ { type => 'friend', uid => $id, parser => \&_parseFriend} ]
 		};
 	}
-	
+
 	return $menuEntries;
-	
+
 	$log->debug('_parseFriends ended.');
 }
 
-# Parses the given data. If the data is a playlist the number of tracks and 
-# some additional data will be retrieved. The playlist or if the data is a 
-# track will then be shown as a menu item. 
+# Parses the given data. If the data is a playlist the number of tracks and
+# some additional data will be retrieved. The playlist or if the data is a
+# track will then be shown as a menu item.
 sub _parseActivity {
 	$log->debug('_parseActivity started.');
 	my ($client, $entry) = @_;
 
-    my $created_at = $entry->{'created_at'};
-    my $origin = $entry->{'origin'};
-    my $tags = $entry->{'tags'};
-    my $type = $entry->{'type'};
+	my $created_at = $entry->{'created_at'};
+	my $origin = $entry->{'origin'};
+	my $tags = $entry->{'tags'};
+	my $type = $entry->{'type'};
 
 	if ($type =~ /track\:repost.*/) {
 		# If the API returned who reposted then we could add it to the trackentry here.
 	}
-	
+
 	# The .* after playlist in the regex is needed to catch reposts.
-    if ($type =~ /playlist.*/) {
-		
-        my $playlistItem = _parsePlaylist($client, $origin);
-	
-        my $user = $origin->{'user'};
-        my $user_name = $user->{'username'} || $user->{'full_name'};
-		
+	if ($type =~ /playlist.*/) {
+
+		my $playlistItem = _parsePlaylist($client, $origin);
+
+		my $user = $origin->{'user'};
+		my $user_name = $user->{'username'} || $user->{'full_name'};
+
 		if ($playlistItem->{'name'}) {
-            $playlistItem->{'name'} = $playlistItem->{'name'} . " - " . sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
-        } else {
+			$playlistItem->{'name'} = $playlistItem->{'name'} . " - " . sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
+		} else {
 			$playlistItem->{'name'} = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
 		}
-		
-		$log->debug('_parseActivity ended.');
-        return $playlistItem;
-    } else {
-        my $track = $origin->{'track'} || $origin;
-        my $user = $origin->{'user'} || $track->{'user'};
-        my $user_name = $user->{'username'} || $user->{'full_name'};
-        $track->{'artist_sqz'} = $user_name;
-		
-        my $subtitle = "";
-        if ($type eq "favoriting") {
-            $subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_FAVORITED_BY') . " %s", $user_name);
-        } elsif ($type eq "comment") {
-            $subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_COMMETED_BY') . " %s", $user_name);
-        } elsif ($type =~ /track/) {
-            $subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_NEW_TRACK') . " %s", $user_name);
-        } else {
-            $subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
-        }
 
-        my $trackentry = _makeMetadata($client, $track);
+		$log->debug('_parseActivity ended.');
+		return $playlistItem;
+	} else {
+		my $track = $origin->{'track'} || $origin;
+		my $user = $origin->{'user'} || $track->{'user'};
+		my $user_name = $user->{'username'} || $user->{'full_name'};
+		$track->{'artist_sqz'} = $user_name;
+
+		my $subtitle = "";
+		if ($type eq "favoriting") {
+			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_FAVORITED_BY') . " %s", $user_name);
+		} elsif ($type eq "comment") {
+			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_COMMETED_BY') . " %s", $user_name);
+		} elsif ($type =~ /track/) {
+			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_NEW_TRACK') . " %s", $user_name);
+		} else {
+			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
+		}
+
+		my $trackentry = _makeMetadata($client, $track);
 		if ($subtitle) {
-            $trackentry->{'name'} = $track->{'title'} . " - " . $subtitle;
-        } else {
+			$trackentry->{'name'} = $track->{'title'} . " - " . $subtitle;
+		} else {
 			$trackentry->{'name'} = $track->{'title'};
 		}
 
 		$log->debug('_parseActivity ended.');
-        return $trackentry;
-    }
-	
+		return $trackentry;
+	}
+
 }
 
-# Parses all available items in the collection. 
+# Parses all available items in the collection.
 # Each item can either be a playlist or a track.
 sub _parseActivities {
 	$log->debug('_parseActivities started.');
 	my ($client, $json) = @_;
 	my $menuEntries = [];
-	
+
 	my $collection = $json->{'collection'};
 
 	for my $entry (@$collection) {
 		push @$menuEntries, _parseActivity($client, $entry);
 	}
-	
+
 	return $menuEntries;
-	
+
 	$log->debug('_parseActivities ended.');
 }
 
@@ -1275,61 +1274,61 @@ sub track_key {
 
 	if ($url =~ /soundcloud\:\/\/(.*)/i) {
 		return $1;
-	}		
+	}
 	return '';
 }
 
 sub playerMenu { shift->can('nonSNApps') ? undef : 'RADIO' }
 
-# First method that is called after the plugin has been initialized. 
+# First method that is called after the plugin has been initialized.
 # Creates the top level menu items that the plugin provides.
 sub toplevel {
 	$log->debug('toplevel started.');
 	my ($client, $callback, $args) = @_;
 
-    # These are the available main menus. The variable type defines the menu 
-    # type (search allows text input, link opens another menu), the url defines
-    # the method that shall be called when the user has selected the menu entry.
-    # The array passthrough holds additional parameters that is passed to the 
-    # method defined by the url variable.  
+	# These are the available main menus. The variable type defines the menu
+	# type (search allows text input, link opens another menu), the url defines
+	# the method that shall be called when the user has selected the menu entry.
+	# The array passthrough holds additional parameters that is passed to the
+	# method defined by the url variable.
 	my $callbacks = [];
 
-    # Add the following menu items only when the user is logged in
+	# Add the following menu items only when the user is logged in
 	if (Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
 
 		# Menu entry to show all activities (Stream)
-		push(@$callbacks, 
+		push(@$callbacks,
 			{ name => string('PLUGIN_SQUEEZECLOUD_ACTIVITIES'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'activities', parser => \&_parseActivities} ] }
 		);
 
 		# Menu entry to show the 'friends' the user is following
-		push(@$callbacks, 
+		push(@$callbacks,
 			{ name => string('PLUGIN_SQUEEZECLOUD_FRIENDS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'friends', parser => \&_parseFriends} ] },
 		);
 
 		# Menu entry to show the 'playlists' the user is following
-        push(@$callbacks, 
-            { name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
-                url  => \&tracksHandler, passthrough => [ { type => 'playlists', parser => \&_parsePlaylists} ] },
-        );
+		push(@$callbacks,
+			{ name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
+				url  => \&tracksHandler, passthrough => [ { type => 'playlists', parser => \&_parsePlaylists} ] },
+		);
 
 		# Menu entry to show the 'playlists' the user is following
-        push(@$callbacks, 
-            { name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
-                url  => \&tracksHandler, passthrough => [ { type => 'liked_playlists', parser => \&_parsePlaylists} ] },
-        );
+		push(@$callbacks,
+			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
+				url  => \&tracksHandler, passthrough => [ { type => 'liked_playlists', parser => \&_parsePlaylists} ] },
+		);
 
-        # Menu entry to show the users favorites
-		push(@$callbacks, 
+		# Menu entry to show the users favorites
+		push(@$callbacks,
 			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACKS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'favorites' } ] }
 		);
 
 		# Menu entry 'New tracks'
 		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_NEW') , type => 'link',   
+		{ name => string('PLUGIN_SQUEEZECLOUD_NEW') , type => 'link',
 			url  => \&tracksHandler, passthrough => [ { params => '&order=created_at' } ], }
 		);
 
@@ -1340,14 +1339,14 @@ sub toplevel {
 		my $param = '&' . URI::Escape::uri_escape_utf8('created_at[from]') . '=' . URI::Escape::uri_escape_utf8($from) .
 					'&' . URI::Escape::uri_escape_utf8('created_at[to]') . '=' . URI::Escape::uri_escape_utf8($to);
 		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_HOT') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACKS'), type => 'link',   
+		{ name => string('PLUGIN_SQUEEZECLOUD_HOT') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACKS'), type => 'link',
 			url  => \&tracksHandler, passthrough => [ { params => $param . '&order=hotness' } ], }
 		);
 
-		
+
 		# Menu entry 'Search'
 		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_SEARCH'), type => 'search',   
+		{ name => string('PLUGIN_SQUEEZECLOUD_SEARCH'), type => 'search',
 			url  => \&tracksHandler, passthrough => [ { params => '&order=hotness' } ], }
 		);
 
@@ -1356,10 +1355,10 @@ sub toplevel {
 		{ name => string('PLUGIN_SQUEEZECLOUD_FRIENDS_SEARCH'), type => 'search',
 			url  => \&tracksHandler, passthrough => [ { type => 'users', parser => \&_parseFriends, params => '&order=hotness' } ] }
 		);
-		
+
 		# Menu entry 'Tags'
 		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_TAGS'), type => 'search',   
+		{ name => string('PLUGIN_SQUEEZECLOUD_TAGS'), type => 'search',
 			url  => \&tracksHandler, passthrough => [ { type => 'tags', params => '&order=hotness' } ], }
 		);
 
@@ -1370,20 +1369,20 @@ sub toplevel {
 		);
 
 		# Menu entry to enter an URL manually
-		push(@$callbacks, 
+		push(@$callbacks,
 			{ name => string('PLUGIN_SQUEEZECLOUD_URL'), type => 'search', url  => \&urlHandler, }
 		);
 
 	} else {
-		push(@$callbacks, 
+		push(@$callbacks,
 			{ name => string('PLUGIN_SQUEEZECLOUD_LOGIN'), type => 'text' }
 		);
 	}
 
-    # Add the menu entries from the menu array. It is responsible for calling 
-    # the correct method (url) and passing any parameters.
+	# Add the menu entries from the menu array. It is responsible for calling
+	# the correct method (url) and passing any parameters.
 	$callback->($callbacks);
-	
+
 	$log->debug('toplevel ended.');
 }
 
