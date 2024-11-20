@@ -31,6 +31,7 @@ use Scalar::Util qw(blessed);
 use Plugins::SqueezeCloud::Oauth2;
 
 my $log   = logger('plugin.squeezecloud');
+my $cache = Slim::Utils::Cache->new('squeezecloud');
 
 my %fetching; # hash of ids we are fetching metadata for to avoid multiple fetches
 
@@ -49,8 +50,6 @@ IO::Socket::SSL::set_defaults(
 ) if preferences('server')->get('insecureHTTPS');
 
 my $prefs = preferences('plugin.squeezecloud');
-
-$prefs->init({ apiKey => "", playmethod => "stream" });
 
 my $prefix = 'sc:';
 
@@ -168,7 +167,6 @@ sub gotNextTrack {
 	my $meta = _makeMetadata($track);
 	$song->duration( $meta->{duration} );
 
-	my $cache = Slim::Utils::Cache->new('squeezecloud');
 	$log->info("setting ". 'soundcloud_meta_' . $track->{id});
 	$cache->set($prefix . 'track' . '-' . $track->{id} , $meta, META_CACHE_TTL);
 

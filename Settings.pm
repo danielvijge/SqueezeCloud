@@ -20,9 +20,9 @@ use JSON::XS::VersionOneAndTwo;
 
 my $log   = logger('plugin.squeezecloud');
 my $prefs = preferences('plugin.squeezecloud');
-my $cache = Slim::Utils::Cache->new();
+my $cache = Slim::Utils::Cache->new('squeezecloud');
 
-# Returns the name of the plugin. The real 
+# Returns the name of the plugin. The real
 # string is specified in the strings.txt file.
 sub name {
 	return 'PLUGIN_SQUEEZECLOUD';
@@ -37,7 +37,7 @@ sub page {
 }
 
 sub prefs {
-	return (preferences('plugin.squeezecloud'), qw(apiKey playmethod));
+	return (preferences('plugin.squeezecloud'), qw(playmethod));
 }
 
 sub handler {
@@ -49,8 +49,8 @@ sub handler {
 		return;
 	}
 	elsif ($params->{logout}) {
-		$log->debug('Logging out...');
-		$cache->remove('refresh_token');
+		$log->info('Logging out...');
+		$prefs->remove('refresh_token');
 		$cache->remove('access_token');
 		$prefs->remove('apiKey');
 	}

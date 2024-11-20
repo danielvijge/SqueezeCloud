@@ -55,7 +55,7 @@ IO::Socket::SSL::set_defaults(
 
 my $log;
 my $compat;
-my $cache;
+my $cache = Slim::Utils::Cache->new('squeezecloud');
 my $prefix = 'sc:';
 
 # This is the entry point in the script
@@ -84,15 +84,13 @@ BEGIN {
 # Get the data related to this plugin and preset certain variables with 
 # default values in case they are not set
 my $prefs = preferences('plugin.squeezecloud');
-$prefs->init({ apiKey => "", playmethod => "stream" });
+$prefs->init({ refresh_token => "", playmethod => "stream" });
 
 # This is called when squeezebox server loads the plugin.
 # It is used to initialize variables and the like.
 sub initPlugin {
 	$log->debug('initPlugin started.');
     my $class = shift;
-	
-	$cache = Slim::Utils::Cache->new('squeezecloud', $class->_pluginDataFor('cacheVersion'));
 	
     # Initialize the plugin with the given values. The 'feed' is the first
     # method called. The available menu entries will be shown in the new 

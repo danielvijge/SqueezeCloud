@@ -19,12 +19,11 @@ use Digest::SHA qw(sha256_base64);
 
 my $log   = logger('plugin.squeezecloud');
 my $prefs = preferences('plugin.squeezecloud');
-my $cache = Slim::Utils::Cache->new();
+my $cache = Slim::Utils::Cache->new('squeezecloud');
 
 use constant CLIENT_ID => "112d35211af80d72c8ff470ab66400d8";
 use constant CLIENT_SECRET => "fc63200fee37d02bc3216cfeffe5f5ae";
 use constant REDIRECT_URI => "https%3A%2F%2Fdanielvijge.github.io%2FSqueezeCloud%2Fcallback.html";
-use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
 
 sub isLoggedIn {
   return(isRefreshTokenAvailable() || isApiKeyAvailable());
@@ -39,7 +38,7 @@ sub isAccessTokenAvailable {
 }
 
 sub isRefreshTokenAvailable {
-  return ($cache->get('refresh_token') ne '');
+	return ($prefs->get('refresh_token') ne '');
 }
 
 sub isAccessTokenExpired {
@@ -92,7 +91,7 @@ sub getAuthorizationToken {
       my $result = eval { from_json($response->content) };
       
       $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
-      $cache->set('refresh_token', $result->{refresh_token}, META_CACHE_TTL);
+			$prefs->set('refresh_token', $result->{refresh_token});
       delete $params->{code};
       $cb->($class, $client, $params, $callback, @args) if $cb;
     },
@@ -132,11 +131,12 @@ sub getAccessTokenWithRefreshToken {
     return;
   }
 
-  $log->debug('Cached refresh token ' . $cache->get('refresh_token'));
   my $post = "grant_type=refresh_token" .
     "&client_id=" . CLIENT_ID .
     "&client_secret=" . CLIENT_SECRET .
     "&refresh_token=" . $cache->get('refresh_token');
+	$log->debug('Cached refresh token ' . $prefs->get('refresh_token'));
+		'&refresh_token=' . $prefs->get('refresh_token');
 
   my $http = Slim::Networking::SimpleAsyncHTTP->new(
     sub {
@@ -144,14 +144,14 @@ sub getAccessTokenWithRefreshToken {
       my $response = shift;
       my $result = eval { from_json($response->content) };
       $cache->set('access_token', $result->{access_token}, $result->{expires_in} - 60);
-      $cache->set('refresh_token', $result->{refresh_token}, META_CACHE_TTL);
+			$prefs->set('refresh_token', $result->{refresh_token});
       $cb->(@params) if $cb;
     },
     sub {
       $log->error('Failed request for refresh_token');
       $log->error($_[1]);
-      $log->debug('Removing refresh_token for failed request. User is nog logged out.');
-      $cache->remove('refresh_token');
+			$log->warn('Removing refresh_token upon failed request. You are now logged out. Complete the authorisation flow on the settings page again.');
+			$prefs->remove('refresh_token');
       $cb->(@params) if $cb;
     },
     {
