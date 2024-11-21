@@ -218,22 +218,6 @@ sub _makeMetadata {
 		passthrough => [ { id => $json->{'id'}, type => 'releated', parser => \&_parseTracks } ]
 	} if $json->{'user'}->{'id'};
 
-	if ($json->{'user_favorite'} ne 1) {
-		push @$trackinfo, {
-			type => 'link',
-			name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'),
-			url  => \&likeTrack,
-			passthrough => [ { id => $json->{'id'}, type => 'text', parser => \&_parseTracks } ]
-		};
-	} else {
-		push @$trackinfo, {
-			type => 'link',
-			name => string('PLUGIN_SQUEEZECLOUD_UNLIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'),
-			url  => \&unlikeTrack,
-			passthrough => [ { id => $json->{'id'}, type => 'text', parser => \&_parseTracks } ]
-		};
-	}
-
 	my $DATA;
 	if ($simpleTracks) {
 		$log->debug('_makeMetadata simpleTracks used.');
@@ -329,76 +313,6 @@ sub _cacheReadTrack {
 	$log->debug('_cacheReadTrack ID: ' . $track{'id'} . ' ' . $id);
 	$log->debug('_cacheReadTrack ended.');
 	return \%track;
-}
-
-sub likeTrack {
-	$log->debug('likeTrack started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $id = $passDict->{'id'} || '';
-	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
-	$log->debug("Liking: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likeTrack, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Like Track Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'), type => 'text' } ]);
-		} else {
-			$log->warn("Like Track Error: " . $response->status_line());
-			$callback->([ { name => $response->status_line(), type => 'text' } ]);
-		}
-
-		# $log->debug('response: ' . $response->as_string);
-	};
-
-	$fetch->();
-
-	$log->debug('likeTrack ended.');
-}
-
-sub unlikeTrack {
-	$log->debug('unlikeTrack started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $id = $passDict->{'id'} || '';
-	my $url = $method . "://api.soundcloud.com/likes/tracks/$id";
-	$log->debug("Unliking: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikeTrack, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Unlike Track Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNLIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACK'), type => 'text' } ]);
-		} else {
-			$log->warn("Unlike Track Error: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_TRACK') . name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
-		}
-
-		#$log->debug('response: ' . $response->as_string);
-	};
-
-	$fetch->();
-
-	$log->debug('unlikeTrack ended.');
 }
 
 # This method is called when the Slim::Networking::SimpleAsyncHTTP encountered
@@ -847,103 +761,8 @@ sub _parsePlaylistTracks {
 		}
 	}
 
-	# Get the icon from the artwork_url. If no url is defined, set the default icon.
-	my $icon = '/html/images/favorites.png';
-	push @$menuEntries, {
-		type => 'link',
-		name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLIST'),
-		url  => \&likePlaylist,
-		icon => $icon,
-		image => $icon,
-		cover => $icon,
-		passthrough => [ { pid => $json->{'id'}, type => 'text', parser => \&_parsePlaylist } ]
-	};
-
-	$icon = '/html/images/favorites_remove.png';
-	push @$menuEntries, {
-		type => 'link',
-		name => string('PLUGIN_SQUEEZECLOUD_UNLIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLIST'),
-		url  => \&unlikePlaylist,
-		icon => $icon,
-		image => $icon,
-		cover => $icon,
-		passthrough => [ { pid => $json->{'id'}, type => 'text', parser => \&_parsePlaylist } ]
-	};
-
-
 	return $menuEntries;
 	$log->debug('_parsePlaylistTracks ended.');
-}
-
-
-sub likePlaylist {
-	$log->debug('likePlaylist started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $id = $passDict->{'pid'} || '';
-	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
-	$log->debug("Liking: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&likePlaylist, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Like Playlist Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKED'), type => 'text' } ]);
-		} else {
-			$log->warn("Like Playlist Error: " . $response->status_line());
-			$callback->([ { name => $response->status_line(), type => 'text' } ]);
-		}
-
-		# $log->debug('response: ' . $response->as_string);
-	};
-
-	$fetch->();
-
-	$log->debug('likePlaylist ended.');
-}
-
-sub unlikePlaylist {
-	$log->debug('unlikePlaylist started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $id = $passDict->{'pid'} || '';
-	my $url = $method . "://api.soundcloud.com/likes/playlists/$id";
-	$log->debug("Unliking: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unlikePlaylist, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Unlike Playlist Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNLIKED'), type => 'text' } ]);
-		} else {
-			$log->warn("Unlike Playlist Error: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_LIKE') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
-		}
-
-		#$log->debug('response: ' . $response->as_string);
-	};
-
-	$fetch->();
-
-	$log->debug('unlikePlaylist ended.');
 }
 
 # Gets more information for the given playlist from the passed data and
@@ -1068,96 +887,9 @@ sub _parseFriend {
 		};
 	}
 
-	push @$menuEntries, {
-		type => 'link',
-		name => string('PLUGIN_SQUEEZECLOUD_FOLLOW'),
-		url  => \&followFriend,
-		passthrough => [ { uid => $id, type => 'friend', parser => \&_parseFriend } ]
-	};
-
-	push @$menuEntries, {
-		type => 'link',
-		name => string('PLUGIN_SQUEEZECLOUD_UNFOLLOW'),
-		url  => \&unfollowFriend,
-		passthrough => [ { uid => $id, type => 'text', parser => \&_parseFriend } ]
-	};
-
-
 	$log->debug('_parseFriend ended.');
 
 	return $menuEntries;
-}
-
-sub followFriend {
-	$log->debug('followFriend started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $uid = $passDict->{'uid'} || '';
-	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
-	$log->debug("Following: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&followFriend, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::POST($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Follow Friend Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_FOLLOWED'), type => 'text' } ]);
-		} else {
-			$log->warn("Follow Friend Error: " . $response->status_line());
-			# $callback->([ { name => $response->status_line(), type => 'text' } ]);
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_ARTIST') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
-		}
-	};
-
-	$fetch->();
-
-	$log->debug('followFriend ended.');
-}
-
-sub unfollowFriend {
-	$log->debug('unfollowFriend started.');
-	my ($client, $callback, $args, $passDict) = @_;
-
-	my $method = "https";
-	my $uid = $passDict->{'uid'} || '';
-	my $url = $method . "://api.soundcloud.com/me/followings/$uid";
-	$log->debug("Unfollowing: $url");
-
-	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
-		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&unfollowFriend, @_);
-		return;
-	}
-
-	my $fetch = sub {
-		my $ua = LWP::UserAgent->new;
-		my $request = HTTP::Request::Common::DELETE($url, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
-		my $response = $ua->request($request);
-
-		if ( $response->is_success() ) {
-			$log->warn("Unfollow Friend Success: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_UNFOLLOWED'), type => 'text' } ]);
-		} elsif ( $response->code() eq 404 ) {
-			$log->warn("Unfollow Friend Error: " . $response->status_line());
-			$callback->([ { name => string('PLUGIN_SQUEEZECLOUD_FOLLOW') . ' ' . string('PLUGIN_SQUEEZECLOUD_NOT_FOUND'), type => 'text' } ]);
-		} else {
-			$log->warn("Unfollow Friend Error: " . $response->status_line());
-			$callback->([ { name => $response->status_line(), type => 'text' } ]);
-		}
-
-		# $log->debug('response: ' . $response->as_string);
-	};
-
-	$fetch->();
-
-	$log->debug('unfollowFriend ended.');
 }
 
 # Goes through the list of available friends from the JSON data and parses the
