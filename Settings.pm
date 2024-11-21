@@ -49,40 +49,32 @@ sub handler {
 		return;
 	}
 	elsif ($params->{logout}) {
-		$log->info('Logging out...');
-		$prefs->remove('refresh_token');
-		$cache->remove('access_token');
-		$prefs->remove('apiKey');
+		$log->debug('Request to log out');
+		Plugins::SqueezeCloud::Oauth2::logout(\&handler, @_);
+		return;
 	}
-
-	if (!Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
-		$log->debug('Generating code and code challange');
-		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
-		$params->{codeChallenge} = $codeChallenge;
-		$params->{hostName} = Slim::Utils::Misc::getLibraryName();
-	}
-
-	my $http = Slim::Networking::SimpleAsyncHTTP->new(
-		sub {
-			$log->debug('Successful request for user info.');
-			my $response = shift;
-			my $result = eval { from_json($response->content) };
-			$log->info('You are logged in to SoundCloud as ' . $result->{username});
-			$params->{username} = $result->{username};
-
-			$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
-		},
-		sub {
-			$log->error('Failed request for user info.');
-			$log->error($_[1]);
-			$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
-		},
-		{
-			timeout => 15,
-		}
-	);
 
 	if (Plugins::SqueezeCloud::Oauth2::isLoggedIn()) {
+
+		my $http = Slim::Networking::SimpleAsyncHTTP->new(
+			sub {
+				$log->debug('Successful request for user info.');
+				my $response = shift;
+				my $result = eval { from_json($response->content) };
+				$log->info('You are logged in to SoundCloud as ' . $result->{username});
+				$params->{username} = $result->{username};
+
+				$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+			},
+			sub {
+				$log->error('Failed request for user info.');
+				$log->error($_[1]);
+				$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+			},
+			{
+				timeout => 15,
+			}
+		);
 
 		if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&handler, @_);
@@ -92,6 +84,11 @@ sub handler {
 		$http->get('https://api.soundcloud.com/me', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	}
 	else {
+		$log->debug('Generating code and code challange');
+		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
+		$params->{codeChallenge} = $codeChallenge;
+		$params->{hostName} = Slim::Utils::Misc::getLibraryName();
+
 		$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
 	}
 }

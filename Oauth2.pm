@@ -165,6 +165,59 @@ sub getAccessTokenWithRefreshToken {
 	);
 }
 
+sub logout {
+	$log->debug('logout started.');
+
+	my $cb = shift;
+	my @params = @_;
+
+	$log->info('Logging out...');
+	
+	if (isLoggedIn()) {
+
+		if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
+			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&logout, @_);
+			return;
+		}
+
+		my $http = Slim::Networking::SimpleAsyncHTTP->new(
+			sub {
+				$log->debug('Successful request for logout');
+				removeTokens();
+				# delete parameter, to prevent loop of logout action
+				delete @params[2]->{logout};
+				$cb->(@params) if $cb;
+			},
+			sub {
+				$log->error('Failed request for logout');
+				$log->error($_[1]);
+				$log->warn('Logout failed. Tokens were removed locally, but not invalidated');
+				removeTokens();
+				delete @params[2]->{logout};
+				$cb->(@params) if $cb;
+			},
+			{
+				timeout => 15,
+			}
+		);
+
+		$http->post(
+			'https://secure.soundcloud.com/sign-out',
+			'{"access_token": "'. (isApiKeyAvailable() ? $prefs->get('apiKey') : $cache->get('access_token')).'"}'
+		);
+	}
+	else {
+		$log->warn('Request for logout, but you are not logged in');
+	}
+}
+
+sub removeTokens {
+	$log->debug('removeTokens started.');
+	$prefs->remove('refresh_token');
+	$cache->remove('access_token');
+	$prefs->remove('apiKey');
+}
+
 sub getAuthenticationHeaders {
 	$log->debug('getAuthenticationHeaders started.');
 	if (isApiKeyAvailable()) {
