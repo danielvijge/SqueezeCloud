@@ -472,20 +472,15 @@ sub tracksHandler {
 
 	my $method = "https";
 	my $uid = $passDict->{'uid'} || '';
+	my $pid = $passDict->{'pid'} || '';
 
-	# If this is set to one then the user has provided the API key. This
-	# is the case when the menu item in the toplevel method are active.
-	my $authenticated = 0;
 	my $extras = '';
 	my $resource;
 
 	# Check the given type (defined by the passthrough array). Depending
 	# on the type certain URL parameters will be set.
 	if ($searchType eq 'playlists') {
-		my $id = $passDict->{'pid'} || '';
-		$authenticated = 1;
-
-		if ($id eq '') {
+		if ($pid eq '') {
 			if ($uid ne '') {
 				$resource = "users/$uid/playlists";
 			}
@@ -496,54 +491,50 @@ sub tracksHandler {
 				$resource = "me/playlists";
 			}
 		} else {
-			$resource = "playlists/$id";
+			$resource = "playlists/$pid";
 		}
-		$extras = "access=playable,preview&linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
+
+	} elsif ($searchType eq 'playlisttracks' && $pid ne '') {
+		$resource = "playlists/$pid/tracks";
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'liked_playlists') {
-		$authenticated = 1;
 		$resource = "me/likes/playlists";
-		$extras = "access=playable,preview&linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'tracks') {
-		$authenticated = 1;
 		$resource = "users/$uid/tracks";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
 
 	} elsif ($searchType eq 'releated') {
 		$quantity = API_DEFAULT_ITEMS_COUNT;
 		my $id = $passDict->{'id'} || '';
-		$authenticated = 1;
 		$resource = "tracks/$id/related";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
 
 	} elsif ($searchType eq 'favorites') {
-		$authenticated = 1;
 		$resource = "users/$uid/likes/tracks";
 		if ($uid eq '') {
 			$resource = "me/likes/tracks";
 		}
-		$extras = "linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'friends') {
-		$authenticated = 1;
 		$resource = "me/followings";
-		$extras = "linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'users') {
 		# Override maximum quantity
 		$quantity = API_DEFAULT_ITEMS_COUNT;
-		$authenticated = 1;
 		$resource = "users";
-		$extras = "linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'friend') {
-		$authenticated = 1;
 		$resource = "users/$uid";
-		$extras = "linked_partitioning=true&page_size=" . $pageSize;
+		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'activities') {
-		$authenticated = 1;
 		# Override maximum quantity
 		# $quantity = API_DEFAULT_ITEMS_COUNT;
 		$resource = "me/activities";
@@ -597,8 +588,8 @@ sub _getTracks {
 
 			# Queries that uses pagesize need the recursion to be terminated before next_href is empty. (first half of if-statement)
 			# Queries that accept the limit parameter do not need the recursion terminated early. (second half of if-statement)
-			if ((($searchType ne 'tracks' || $searchType ne 'activities' || $searchType ne 'related' || $searchType ne 'tags' || !defined($searchType))
-				 && ($total >= $quantity || $total % $quantity != 0)) ||
+			if ((($searchType ne 'tracks' || $searchType ne 'activities' || $searchType ne 'related' || $searchType ne 'tags' || $searchType ne 'playlists' || $searchType ne 'playlisttracks' || !defined($searchType))
+				 && ($total >= $quantity)) ||
 				($next_href eq '')) {
 
 				if ($searchType eq 'friends') {
@@ -784,11 +775,11 @@ sub _parsePlaylist {
 		$year = substr $entry->{'created_at'}, 0, 4;
 	}
 	if ($year) {
-		$titleInfo .= $year . ' ';
+		$titleInfo .= $year . ', ';
 	}
 
 	if (exists $entry->{'tracks'} || exists $entry->{'track_count'}) {
-		$numTracks = exists $entry->{'tracks'} ? scalar(@{$entry->{'tracks'}}) : scalar($entry->{'track_count'});
+		$numTracks = exists $entry->{'tracks_count'} ? scalar($entry->{'track_count'}) : scalar(@{$entry->{'tracks'}});
 		if ($numTracks eq 1) {
 			$titleInfo .= "$numTracks " . lc(string('PLUGIN_SQUEEZECLOUD_TRACK'));
 		} else {
@@ -799,7 +790,7 @@ sub _parsePlaylist {
 	# Add information about the playlist play time
 	my $totalSeconds = ($entry->{'duration'} || 0) / 1000;
 	if ($totalSeconds != 0) {
-		$titleInfo .= ' ' . sprintf('%s:%02s', int($totalSeconds / 60), $totalSeconds % 60);
+		$titleInfo .= ', ' . sprintf('%s:%02s', int($totalSeconds / 60), $totalSeconds % 60);
 	}
 
 	# Get the icon from the artwork_url. If no url is defined, set the default icon.
@@ -822,7 +813,7 @@ sub _parsePlaylist {
 		type => 'playlist',
 		icon => $icon,
 		url => \&tracksHandler,
-		passthrough => [ { type => 'playlists', pid => $entry->{'id'}, parser => \&_parsePlaylistTracks }],
+		passthrough => [ { type => (exists $entry->{'tracks_uri'} ? 'playlisttracks' : 'playlists'), pid => $entry->{'id'}, parser => (exists $entry->{'tracks_uri'} ? \&_parseTracks : \&_parsePlaylistTracks) }],
 	};
 
 	$log->debug('_parsePlaylist ended.');
