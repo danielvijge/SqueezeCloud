@@ -216,6 +216,7 @@ sub removeTokens {
 	$prefs->remove('refresh_token');
 	$cache->remove('access_token');
 	$prefs->remove('apiKey');
+	$cache->clear(); # clear cache, so any personal items are no longer available
 }
 
 sub getAuthenticationHeaders {

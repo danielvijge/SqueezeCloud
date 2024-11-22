@@ -20,7 +20,6 @@ use vars qw(@ISA);
 
 use URI::Escape;
 use JSON::XS::VersionOneAndTwo;
-use LWP::Simple;
 use LWP::UserAgent;
 use File::Spec::Functions qw(:ALL);
 use List::Util qw(min max);
@@ -34,15 +33,12 @@ use Plugins::SqueezeCloud::Oauth2;
 # Defines the timeout in seconds for a http request
 use constant HTTP_TIMEOUT => 15;
 
-# The maximum items that can be fetched via the API in one call - 200
-use constant API_MAX_ITEMS_PER_CALL => 200;
-
 # The default number of items to fetch in one API call
 use constant API_DEFAULT_ITEMS_COUNT => 50;
 
 # The maximum value that should be fetched via the API.
 # It is not advisable to increase this value.
-use constant API_MAX_ITEMS => 400;
+use constant API_MAX_ITEMS => 200;
 
 # Which URLs should we catch when pasted into the "Tune In URL" field?
 use constant PAGE_URL_REGEXP => qr{^https?://soundcloud\.com/};
@@ -103,12 +99,6 @@ sub initPlugin {
 		is_app => $class->can('nonSNApps') ? 1 : undef,
 		weight => 10,
 	);
-
-	# clear the cache when user enters an apiKey
-	$prefs->setChange(sub {
-		my ($pref, $new, $obj, $old) = @_;
-		$cache->clear;
-	}, 'apiKey');
 
 	if (!$::noweb) {
 		require Plugins::SqueezeCloud::Settings;
@@ -398,11 +388,10 @@ sub fetchMetadata {
 
 	if ($url =~ /soundcloud\:\/\/(.*)/i) {
 		my $resource = 'tracks/' . $1;
-		my $method = "https";
 		# my $params .= "&filter=streamable";
 		my $params .= "";
 		my $extras = "linked_partitioning=true&limit=1";
-		my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params;
+		my $queryUrl = "https://api.soundcloud.com/".$resource."?" . $extras . $params;
 
 		if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&fetchMetadata, @_);
@@ -457,8 +446,8 @@ sub tracksHandler {
 	my $menu = [];
 
 	# The number of items to fetch, either specified in arguments or the maximum possible.
-	my $pageSize = min(API_MAX_ITEMS_PER_CALL || API_MAX_ITEMS);
-	my $quantity = API_MAX_ITEMS;
+	my $pageSize = API_DEFAULT_ITEMS_COUNT;
+	my $quantity = min(API_DEFAULT_ITEMS_COUNT, API_MAX_ITEMS);
 
 	my $searchType = $passDict->{'type'};
 	my $searchStr = ($searchType eq 'tags') ? "tags=" : "q=";
@@ -470,7 +459,6 @@ sub tracksHandler {
 
 	my $params = $passDict->{'params'} || '';
 
-	my $method = "https";
 	my $uid = $passDict->{'uid'} || '';
 	my $pid = $passDict->{'pid'} || '';
 
@@ -484,9 +472,6 @@ sub tracksHandler {
 			if ($uid ne '') {
 				$resource = "users/$uid/playlists";
 			}
-			elsif ($search ne '') {
-				$resource = "playlists";
-			}
 			else {
 				$resource = "me/playlists";
 			}
@@ -499,19 +484,23 @@ sub tracksHandler {
 		$resource = "playlists/$pid/tracks";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
+	} elsif ($searchType eq 'playlistsearch') {
+		$resource = "playlists";
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
+
 	} elsif ($searchType eq 'liked_playlists') {
 		$resource = "me/likes/playlists";
 		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'tracks') {
 		$resource = "users/$uid/tracks";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'releated') {
-		$quantity = API_DEFAULT_ITEMS_COUNT;
+		$quantity = API_MAX_ITEMS;
 		my $id = $passDict->{'id'} || '';
 		$resource = "tracks/$id/related";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'favorites') {
 		$resource = "users/$uid/likes/tracks";
@@ -526,7 +515,7 @@ sub tracksHandler {
 
 	} elsif ($searchType eq 'users') {
 		# Override maximum quantity
-		$quantity = API_DEFAULT_ITEMS_COUNT;
+		$quantity = API_MAX_ITEMS;
 		$resource = "users";
 		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
@@ -536,14 +525,14 @@ sub tracksHandler {
 
 	} elsif ($searchType eq 'activities') {
 		# Override maximum quantity
-		# $quantity = API_DEFAULT_ITEMS_COUNT;
+		$quantity = API_MAX_ITEMS;
 		$resource = "me/activities";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $quantity;
+		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} else {
 		$resource = "tracks";
 		# Override maximum quantity
-		$quantity = API_DEFAULT_ITEMS_COUNT;
+		$quantity = API_MAX_ITEMS;
 		# $params .= "&filter=streamable";
 		# access parameter only works with a search input
 		if ( $args->{'search'} ) {
@@ -552,23 +541,23 @@ sub tracksHandler {
 		$extras = "linked_partitioning=true&limit=" . $quantity;
 	}
 
-	my $queryUrl = $method."://api.soundcloud.com/".$resource."?" . $extras . $params . "&" . $search;
+	my $queryUrl = "https://api.soundcloud.com/".$resource."?" . $extras . $params . "&" . $search;
 
-	$log->debug("fetching: " . $queryUrl);
-
-	_getTracks($client, $searchType, $index, $quantity, $queryUrl, $uid, 0, $parser, $callback, $menu);
+	_getTracks($client, $searchType, $index, $quantity, $queryUrl, $uid, $parser, $callback, $menu);
 
 	$log->debug('tracksHandler ended.');
 }
 
 sub _getTracks {
 	$log->debug('_getTracks started.');
-	my ($client, $searchType, $index, $quantity, $queryUrl, $uid, $cursor, $parser, $callback, $menu) = @_;
+	my ($client, $searchType, $index, $quantity, $queryUrl, $uid, $parser, $callback, $menu) = @_;
 
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&_getTracks, @_);
 		return;
 	}
+
+	$log->debug("fetching: " . $queryUrl);
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 		# Called when a response has been received for the request.
@@ -586,21 +575,20 @@ sub _getTracks {
 
 			my $total = scalar @$menu;
 
-			# Queries that uses pagesize need the recursion to be terminated before next_href is empty. (first half of if-statement)
-			# Queries that accept the limit parameter do not need the recursion terminated early. (second half of if-statement)
-			if ((($searchType ne 'tracks' || $searchType ne 'activities' || $searchType ne 'related' || $searchType ne 'tags' || $searchType ne 'playlists' || $searchType ne 'playlisttracks' || !defined($searchType))
-				 && ($total >= $quantity)) ||
-				($next_href eq '')) {
-
+			# Queries that uses recursion need to be terminated, either when the end of the list is reached (for some known search type),
+			# or when the maximum is reached (for search types that are 'infinite' (e.g. search or feed))
+			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks'];
+			if (
+				($next_href eq '' && $searchType ~~ $recursiveSearchTypes) ||
+				($total >= $quantity && !($searchType ~~ $recursiveSearchTypes))) {
+				
 				if ($searchType eq 'friends') {
-					# Sort by UID
-					# $menu = [ sort { ($a->{passthrough}->[0]->{'uid'}) <=> ($b->{passthrough}->[0]->{'uid'}) } @$menu ];
 					# Sort by Name.
 					$menu = [ sort { uc($a->{name}) cmp uc($b->{name}) } @$menu ];
 				}
 
 				my $i = 1;
-				if ($searchType eq 'tracks') {
+				if ($searchType eq 'tracks' || $searchType eq 'playlisttracks') {
 					for my $entry (@$menu) {
 						_cacheWriteTrack($entry);
 						$i++;
@@ -613,9 +601,8 @@ sub _getTracks {
 
 				_callbackTracks($menu, $index, $quantity, $callback);
 
-			} else {
-				$cursor = $total + 1;
-				_getTracks($client, $searchType, $index, $quantity, $next_href, $uid, $cursor, $parser, $callback, $menu);
+			} else {;
+				_getTracks($client, $searchType, $index, $quantity, $next_href, $uid, $parser, $callback, $menu);
 			}
 
 		},
@@ -699,6 +686,8 @@ sub urlHandler {
 
 	my $url = $args->{'search'};
 
+	# for some reason '.'' is converted to ' ' ??? Undo this
+	$url =~ s/ /./;
 	# Remove mobile website prefix
 	$url =~ s/\/\/m./\/\//;
 
@@ -779,7 +768,7 @@ sub _parsePlaylist {
 	}
 
 	if (exists $entry->{'tracks'} || exists $entry->{'track_count'}) {
-		$numTracks = exists $entry->{'tracks_count'} ? scalar($entry->{'track_count'}) : scalar(@{$entry->{'tracks'}});
+		$numTracks = exists $entry->{'track_count'} ? scalar($entry->{'track_count'}) : scalar(@{$entry->{'tracks'}});
 		if ($numTracks eq 1) {
 			$titleInfo .= "$numTracks " . lc(string('PLUGIN_SQUEEZECLOUD_TRACK'));
 		} else {
@@ -788,9 +777,9 @@ sub _parsePlaylist {
 	}
 
 	# Add information about the playlist play time
-	my $totalSeconds = ($entry->{'duration'} || 0) / 1000;
-	if ($totalSeconds != 0) {
-		$titleInfo .= ', ' . sprintf('%s:%02s', int($totalSeconds / 60), $totalSeconds % 60);
+	my $totalSeconds =  Slim::Utils::DateTime::timeFormat($entry->{'duration'} / 1000);
+	if ($totalSeconds ne '0:00:00') {
+		$titleInfo .= ', ' . $totalSeconds;
 	}
 
 	# Get the icon from the artwork_url. If no url is defined, set the default icon.
@@ -921,52 +910,23 @@ sub _parseActivity {
 
 	my $created_at = $entry->{'created_at'};
 	my $origin = $entry->{'origin'};
-	my $tags = $entry->{'tags'};
 	my $type = $entry->{'type'};
 
-	if ($type =~ /track\:repost.*/) {
-		# If the API returned who reposted then we could add it to the trackentry here.
-	}
+	# If the API returned who reposted then we could add it to the trackentry here.
+	# if ($type =~ /track\:repost.*/) {	
+	# }
 
 	# The .* after playlist in the regex is needed to catch reposts.
 	if ($type =~ /playlist.*/) {
 
 		my $playlistItem = _parsePlaylist($client, $origin);
 
-		my $user = $origin->{'user'};
-		my $user_name = $user->{'username'} || $user->{'full_name'};
-
-		if ($playlistItem->{'name'}) {
-			$playlistItem->{'name'} = $playlistItem->{'name'} . " - " . sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
-		} else {
-			$playlistItem->{'name'} = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
-		}
-
 		$log->debug('_parseActivity ended.');
 		return $playlistItem;
 	} else {
 		my $track = $origin->{'track'} || $origin;
-		my $user = $origin->{'user'} || $track->{'user'};
-		my $user_name = $user->{'username'} || $user->{'full_name'};
-		$track->{'artist_sqz'} = $user_name;
-
-		my $subtitle = "";
-		if ($type eq "favoriting") {
-			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_FAVORITED_BY') . " %s", $user_name);
-		} elsif ($type eq "comment") {
-			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_COMMETED_BY') . " %s", $user_name);
-		} elsif ($type =~ /track/) {
-			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_NEW_TRACK') . " %s", $user_name);
-		} else {
-			$subtitle = sprintf(string('PLUGIN_SQUEEZECLOUD_STREAM_SHARED_BY') . " %s", $user_name);
-		}
 
 		my $trackentry = _makeMetadata($client, $track);
-		if ($subtitle) {
-			$trackentry->{'name'} = $track->{'title'} . " - " . $subtitle;
-		} else {
-			$trackentry->{'name'} = $track->{'title'};
-		}
 
 		$log->debug('_parseActivity ended.');
 		return $trackentry;
@@ -1031,21 +991,21 @@ sub toplevel {
 				url  => \&tracksHandler, passthrough => [ { type => 'friends', parser => \&_parseFriends} ] },
 		);
 
-		# Menu entry to show the 'playlists' the user is following
+		# Menu entry to show the 'my playlists' the user is following
 		push(@$callbacks,
-			{ name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
+			{ name => string('PLUGIN_SQUEEZECLOUD_MY_PLAYLISTS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'playlists', parser => \&_parsePlaylists} ] },
 		);
 
-		# Menu entry to show the 'playlists' the user is following
+		# Menu entry to show the 'liked playlists' the user is following
 		push(@$callbacks,
-			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'), type => 'link',
+			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED_PLAYLISTS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'liked_playlists', parser => \&_parsePlaylists} ] },
 		);
 
 		# Menu entry to show the users favorites
 		push(@$callbacks,
-			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED') . ' ' . string('PLUGIN_SQUEEZECLOUD_TRACKS'), type => 'link',
+			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED_TRACKS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'favorites' } ] }
 		);
 
@@ -1088,7 +1048,7 @@ sub toplevel {
 		# Menu entry 'Playlists'
 		push(@$callbacks,
 		{ name => string('PLUGIN_SQUEEZECLOUD_PLAYLIST_SEARCH'), type => 'search',
-			url  => \&tracksHandler, passthrough => [ { type => 'playlists', parser => \&_parsePlaylists, params => '&order=hotness'  } ] }
+			url  => \&tracksHandler, passthrough => [ { type => 'playlistsearch', parser => \&_parsePlaylists, params => '&order=hotness'  } ] }
 		);
 
 		# Menu entry to enter an URL manually
