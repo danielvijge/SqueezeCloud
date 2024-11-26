@@ -447,10 +447,10 @@ sub tracksHandler {
 
 	# The number of items to fetch, either specified in arguments or the maximum possible.
 	my $pageSize = API_DEFAULT_ITEMS_COUNT;
-	my $quantity = min(API_DEFAULT_ITEMS_COUNT, API_MAX_ITEMS);
+	my $quantity = ''; # placeholder for all, can be overwritten later
 
 	my $searchType = $passDict->{'type'};
-	my $searchStr = ($searchType eq 'tags') ? "tags=" : "q=";
+	my $searchStr = ($searchType eq 'tags') ? "&tags=" : "&q=";
 	my $search = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
 
 	# The parser is the method that will be called when the
@@ -462,7 +462,7 @@ sub tracksHandler {
 	my $uid = $passDict->{'uid'} || '';
 	my $pid = $passDict->{'pid'} || '';
 
-	my $extras = '';
+	my $extras = 'access=playable,preview&linked_partitioning=true&limit=' . $pageSize;
 	my $resource;
 
 	# Check the given type (defined by the passthrough array). Depending
@@ -478,56 +478,45 @@ sub tracksHandler {
 		} else {
 			$resource = "playlists/$pid";
 		}
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'playlisttracks' && $pid ne '') {
 		$resource = "playlists/$pid/tracks";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'playlistsearch') {
 		$resource = "playlists";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'liked_playlists') {
 		$resource = "me/likes/playlists";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'tracks') {
 		$resource = "users/$uid/tracks";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'releated') {
 		$quantity = API_MAX_ITEMS;
 		my $id = $passDict->{'id'} || '';
 		$resource = "tracks/$id/related";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'favorites') {
 		$resource = "users/$uid/likes/tracks";
 		if ($uid eq '') {
 			$resource = "me/likes/tracks";
 		}
-		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'friends') {
 		$resource = "me/followings";
-		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'users') {
 		# Override maximum quantity
 		$quantity = API_MAX_ITEMS;
 		$resource = "users";
-		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'friend') {
 		$resource = "users/$uid";
-		$extras = "linked_partitioning=true&limit=" . $pageSize;
 
 	} elsif ($searchType eq 'activities') {
 		# Override maximum quantity
 		$quantity = API_MAX_ITEMS;
 		$resource = "me/activities";
-		$extras = "access=playable,preview&linked_partitioning=true&limit=" . $pageSize;
 
 	} else {
 		$resource = "tracks";
@@ -538,10 +527,9 @@ sub tracksHandler {
 		if ( $args->{'search'} ) {
 			$params .= "&access=playable,preview";
 		}
-		$extras = "linked_partitioning=true&limit=" . $quantity;
 	}
-
-	my $queryUrl = "https://api.soundcloud.com/".$resource."?" . $extras . $params . "&" . $search;
+	
+	my $queryUrl = "https://api.soundcloud.com/" . $resource . "?" . $extras . $params . $search;
 
 	_getTracks($client, $searchType, $index, $quantity, $queryUrl, $uid, $parser, $callback, $menu);
 
@@ -599,6 +587,11 @@ sub _getTracks {
 					$cache->set($prefix . $searchType . $uid . '-' . '-total', ($total), META_CACHE_TTL);
 				}
 
+				# if quantity is still '' (meaning all), the quantity is equal to the total item retrieved
+				if ($quantity eq '') {
+					$quantity = $total;
+				}
+
 				_callbackTracks($menu, $index, $quantity, $callback);
 
 			} else {;
@@ -622,25 +615,25 @@ sub _callbackTracks {
 	my ( $menu, $index, $quantity, $callback ) = @_;
 
 	my $total = scalar @$menu;
-	if ($quantity ne 1) {
-		$quantity = min($quantity, $total - $index);
-	}
+	# if ($quantity ne 1) {
+	# 	$quantity = min($quantity, $total - $index);
+	# }
 
-	my $returnMenu = [];
+	# my $returnMenu = [];
 
-	my $i = 0;
-	my $count = 0;
-	for my $entry (@$menu) {
-		if ($i >= $index && $count < $quantity) {
-			push @$returnMenu, $entry;
-			$count++;
-		}
-		$i++;
-	}
+	# my $i = 0;
+	# my $count = 0;
+	# for my $entry (@$menu) {
+	# 	if ($i >= $index && $count < $quantity) {
+	# 		push @$returnMenu, $entry;
+	# 		$count++;
+	# 	}
+	# 	$i++;
+	# }
 
 	$callback->({
-		items  => $returnMenu,
-		offset => $index,
+		items  => $menu,
+		offset => 0,
 		total  => $total,
 	});
 	$log->debug('_callbackTracks ended.');
