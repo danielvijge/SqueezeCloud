@@ -69,6 +69,14 @@ sub handler {
 			sub {
 				$log->error('Failed request for user info.');
 				$log->error($_[1]);
+				# If the error is related to authorisation, remove all tokens so user must log in again
+				if ($_[1] eq '401 Unauthorized') {
+					Plugins::SqueezeCloud::Oauth2::removeTokens();
+					$log->debug('Generating code and code challenge because unexpected logout occurred');
+					my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
+					$params->{codeChallenge} = $codeChallenge;
+					$params->{hostName} = Slim::Utils::Misc::getLibraryName();
+				}
 				$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
 			},
 			{
@@ -84,7 +92,7 @@ sub handler {
 		$http->get('https://api.soundcloud.com/me', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
 	}
 	else {
-		$log->debug('Generating code and code challange');
+		$log->debug('Generating code and code challenge');
 		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
 		$params->{codeChallenge} = $codeChallenge;
 		$params->{hostName} = Slim::Utils::Misc::getLibraryName();
