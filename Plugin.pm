@@ -565,10 +565,10 @@ sub _getTracks {
 
 			# Queries that uses recursion need to be terminated, either when the end of the list is reached (for some known search type),
 			# or when the maximum is reached (for search types that are 'infinite' (e.g. search or feed))
-			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks'];
+			my @recursiveSearchTypes = ('favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks');
 			if (
-				($next_href eq '' && $searchType ~~ $recursiveSearchTypes) ||
-				($total >= $quantity && !($searchType ~~ $recursiveSearchTypes))) {
+				($next_href eq '' && grep { $_ == $searchType } @recursiveSearchTypes) ||
+				($total >= $quantity && !(grep { $_ == $searchType } @recursiveSearchTypes))) {
 				
 				if ($searchType eq 'friends') {
 					# Sort by Name.
@@ -615,21 +615,6 @@ sub _callbackTracks {
 	my ( $menu, $index, $quantity, $callback ) = @_;
 
 	my $total = scalar @$menu;
-	# if ($quantity ne 1) {
-	# 	$quantity = min($quantity, $total - $index);
-	# }
-
-	# my $returnMenu = [];
-
-	# my $i = 0;
-	# my $count = 0;
-	# for my $entry (@$menu) {
-	# 	if ($i >= $index && $count < $quantity) {
-	# 		push @$returnMenu, $entry;
-	# 		$count++;
-	# 	}
-	# 	$i++;
-	# }
 
 	$callback->({
 		items  => $menu,
