@@ -565,10 +565,12 @@ sub _getTracks {
 
 			# Queries that uses recursion need to be terminated, either when the end of the list is reached (for some known search type),
 			# or when the maximum is reached (for search types that are 'infinite' (e.g. search or feed))
-			my @recursiveSearchTypes = ('favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks');
+			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks'];
+			my $is_recursive = grep { $_ eq $searchType } @$recursiveSearchTypes;
+
 			if (
-				($next_href eq '' && grep { $_ == $searchType } @recursiveSearchTypes) ||
-				($total >= $quantity && !(grep { $_ == $searchType } @recursiveSearchTypes))) {
+				($next_href eq '' && $is_recursive) ||
+				($total >= $quantity && !$is_recursive)) {
 				
 				if ($searchType eq 'friends') {
 					# Sort by Name.
