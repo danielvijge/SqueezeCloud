@@ -86,6 +86,7 @@ sub _makeMetadata {
 		cover => $icon,
 		year => ($year ? $year : ''),
 		on_select => 'play',
+		genre => $json->{'genre'},
 	};
 }
 

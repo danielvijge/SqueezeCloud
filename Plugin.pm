@@ -188,6 +188,11 @@ sub _makeMetadata {
 		type => 'text',
 	} if $year;
 
+	push @$trackinfo, {
+		name => cstring($client, 'GENRE') . cstring($client, 'COLON') . ' ' . $json->{'genre'},
+		type => 'text',
+	} if $json->{'genre'};
+
 	# It is a requirement of the SoundCloud API Terms to include this link.
 	push @$trackinfo, {
 		name => string('PLUGIN_SQUEEZECLOUD_LINK') . cstring($client, 'COLON') . ' ' . $json->{'permalink_url'},
@@ -229,6 +234,7 @@ sub _makeMetadata {
 			cover => $icon,
 			year => ($year ? $year : ''),
 			on_select => 'play',
+			genre => $json->{'genre'},
 		}
 	} else {
 		$DATA = {
@@ -253,6 +259,7 @@ sub _makeMetadata {
 			cover => $icon,
 			year => ($year ? $year : ''),,
 			on_select => 'play',
+			genre => $json->{'genre'},
 			items => $trackinfo,
 			playall     => 0,
 			passthrough => [{
@@ -282,6 +289,7 @@ sub _cacheWriteTrack {
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-artwork_url', $track->{'icon'}, META_CACHE_TTL);
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-bpm', (int($track->{'bpm'}) > 0 ? int($track->{'bpm'}) : ''), META_CACHE_TTL);
 	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-year', (int($track->{'year'}) > 0 ? int($track->{'year'}) : ''), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-genre', encode_utf8($track->{'genre'}), META_CACHE_TTL);
 	$cache->set($prefix . $searchType . '-' . $track->{'id'}, $track->{'id'}, META_CACHE_TTL);
 	$log->debug('_cacheWriteTrack ended.');
 }
@@ -299,6 +307,7 @@ sub _cacheReadTrack {
 	$track{artwork_url} = $cache->get($prefix . $searchType . '-' . $id . '-artwork_url');
 	$track{bpm} = $cache->get($prefix . $searchType . '-' . $id . '-bpm');
 	$track{year} = $cache->get($prefix . $searchType . '-' . $id . '-year');
+	$track{genre} = $cache->get($prefix . $searchType . '-' . $id . '-genre');
 	$track{id} = $id;
 	$log->debug('_cacheReadTrack ID: ' . $track{'id'} . ' ' . $id);
 	$log->debug('_cacheReadTrack ended.');
