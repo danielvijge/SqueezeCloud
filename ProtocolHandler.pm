@@ -69,15 +69,15 @@ sub _makeMetadata {
 
 	my $icon = getBetterArtworkURL($json->{'artwork_url'} || "");
 	my $DATA = {
-		id => $json->{'id'},
+		urn => $json->{'urn'},
 		duration => $json->{'duration'} / 1000,
 		name => $json->{'title'},
 		title => $json->{'title'},
 		artist => $json->{'user'}->{'username'},
 		album => "SoundCloud",
-		play => "soundcloud://" . $json->{'id'},
+		play => "soundcloud://" . $json->{'urn'},
 		#url  => $json->{'permalink_url'},
-		#link => "soundcloud://" . $json->{'id'},
+		#link => "soundcloud://" . $json->{'urn'},
 		bitrate => '128kbps',
 		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
 		type => 'audio',
@@ -168,8 +168,8 @@ sub gotNextTrack {
 	my $meta = _makeMetadata($track);
 	$song->duration( $meta->{duration} );
 
-	$log->info("setting ". 'soundcloud_meta_' . $track->{id});
-	$cache->set($prefix . 'track' . '-' . $track->{id} , $meta, META_CACHE_TTL);
+	$log->info("setting ". 'soundcloud_meta_' . $track->{urn});
+	$cache->set($prefix . 'track' . '-' . $track->{urn} , $meta, META_CACHE_TTL);
 
 	$http->params->{callback}->();
 }
@@ -187,10 +187,13 @@ sub getNextTrack {
 	my $url    = $song->currentTrack()->url;
 
 	# Get next track
-	my ($id) = $url =~ m{^soundcloud://(.*)$};
+	my ($urn) = $url =~ m{^soundcloud://(.*)$};
+
+	# Convert old id that might still be in favourites or cache to urn
+	$urn = 'soundcloud:tracks:'.$urn unless $url =~ /^soundcloud\:tracks\:/;
 
 	# Talk to SN and get the next track to play
-	my $trackURL = "https://api.soundcloud.com/tracks/" . $id;
+	my $trackURL = "https://api.soundcloud.com/tracks/" . $urn;
 
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 			Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&getNextTrack, @_);
@@ -209,7 +212,7 @@ sub getNextTrack {
 		},
 	);
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $id");
+	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $urn");
 
 	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 }

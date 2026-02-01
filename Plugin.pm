@@ -203,29 +203,29 @@ sub _makeMetadata {
 		type => 'link',
 		name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $json->{'user'}->{'username'},
 		url  => \&tracksHandler,
-		passthrough => [ { uid => $json->{'user'}->{'id'}, type => 'friend', parser => \&_parseFriend } ]
-	} if $json->{'user'}->{'id'};
+		passthrough => [ { uid => $json->{'user'}->{'urn'}, type => 'friend', parser => \&_parseFriend } ]
+	} if $json->{'user'}->{'urn'};
 
 	push @$trackinfo, {
 		type => 'link',
 		name => string('PLUGIN_SQUEEZECLOUD_RELATED'),
 		url  => \&tracksHandler,
-		passthrough => [ { id => $json->{'id'}, type => 'releated', parser => \&_parseTracks } ]
-	} if $json->{'user'}->{'id'};
+		passthrough => [ { urn => $json->{'urn'}, type => 'releated', parser => \&_parseTracks } ]
+	} if $json->{'user'}->{'urn'};
 
 	my $DATA;
 	if ($simpleTracks) {
 		$log->debug('_makeMetadata simpleTracks used.');
 		$DATA = {
-			id => $json->{'id'},
+			urn => $json->{'urn'},
 			duration => $json->{'duration'} / 1000,
 			name => $json->{'title'},
 			title => $json->{'title'},
 			artist => $json->{'user'}->{'username'},
 			album => "SoundCloud",
-			play => "soundcloud://" . $json->{'id'},
+			play => "soundcloud://" . $json->{'urn'},
 			#url  => $json->{'permalink_url'},
-			#link => "soundcloud://" . $json->{'id'},
+			#link => "soundcloud://" . $json->{'urn'},
 			bitrate => '128kbps',
 			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
 			type => 'MP3 (SoundCloud)',
@@ -238,7 +238,7 @@ sub _makeMetadata {
 		}
 	} else {
 		$DATA = {
-			id => $json->{'id'},
+			urn => $json->{'urn'},
 			duration => $json->{'duration'} / 1000,
 			name => $json->{'title'},
 			# line1 and line2 are used in browse view
@@ -248,9 +248,9 @@ sub _makeMetadata {
 			title => $json->{'title'} . ' (' . $duration . ')',
 			artist => $json->{'user'}->{'username'},
 			album => "SoundCloud",
-			play => "soundcloud://" . $json->{'id'},
+			play => "soundcloud://" . $json->{'urn'},
 			#url  => $json->{'permalink_url'},
-			#link => "soundcloud://" . $json->{'id'},
+			#link => "soundcloud://" . $json->{'urn'},
 			bitrate => '128kbps',
 			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
 			type => 'MP3 (SoundCloud)',
@@ -263,7 +263,7 @@ sub _makeMetadata {
 			items => $trackinfo,
 			playall     => 0,
 			passthrough => [{
-				track_id => $json->{'id'}
+				track_urn => $json->{'urn'}
 			}]
 		}
 	}
@@ -282,34 +282,34 @@ sub _cacheWriteTrack {
 	$log->debug('_cacheWriteTrack started.');
 	my ($track) = @_;
 	my $searchType = 'track';
-	$log->debug('_cacheWriteTrack ID: ' . $track->{'id'});
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-duration', $track->{'duration'} * 1000, META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-name', encode_utf8($track->{'name'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-artist', encode_utf8($track->{'artist'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-artwork_url', $track->{'icon'}, META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-bpm', (int($track->{'bpm'}) > 0 ? int($track->{'bpm'}) : ''), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-year', (int($track->{'year'}) > 0 ? int($track->{'year'}) : ''), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'} . '-genre', encode_utf8($track->{'genre'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'id'}, $track->{'id'}, META_CACHE_TTL);
+	$log->debug('_cacheWriteTrack ID: ' . $track->{'urn'});
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-duration', $track->{'duration'} * 1000, META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-name', encode_utf8($track->{'name'}), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-artist', encode_utf8($track->{'artist'}), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-artwork_url', $track->{'icon'}, META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-bpm', (int($track->{'bpm'}) > 0 ? int($track->{'bpm'}) : ''), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-year', (int($track->{'year'}) > 0 ? int($track->{'year'}) : ''), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-genre', encode_utf8($track->{'genre'}), META_CACHE_TTL);
+	$cache->set($prefix . $searchType . '-' . $track->{'urn'}, $track->{'urn'}, META_CACHE_TTL);
 	$log->debug('_cacheWriteTrack ended.');
 }
 
 sub _cacheReadTrack {
 	$log->debug('_cacheReadTrack started.');
-	my ($id) = @_;
+	my ($urn) = @_;
 	my %track;
 	my $searchType = 'track';
-	$track{duration} = $cache->get($prefix . $searchType . '-' . $id . '-duration');
-	$track{name} = $cache->get($prefix . $searchType . '-' . $id . '-name');
+	$track{duration} = $cache->get($prefix . $searchType . '-' . $urn . '-duration');
+	$track{name} = $cache->get($prefix . $searchType . '-' . $urn . '-name');
 	$track{title} = decode_utf8($track{name});
-	$track{artist} = decode_utf8($cache->get($prefix . $searchType . '-' . $id . '-artist'));
+	$track{artist} = decode_utf8($cache->get($prefix . $searchType . '-' . $urn . '-artist'));
 	$track{user} = {username => $track{artist}};
-	$track{artwork_url} = $cache->get($prefix . $searchType . '-' . $id . '-artwork_url');
-	$track{bpm} = $cache->get($prefix . $searchType . '-' . $id . '-bpm');
-	$track{year} = $cache->get($prefix . $searchType . '-' . $id . '-year');
-	$track{genre} = $cache->get($prefix . $searchType . '-' . $id . '-genre');
-	$track{id} = $id;
-	$log->debug('_cacheReadTrack ID: ' . $track{'id'} . ' ' . $id);
+	$track{artwork_url} = $cache->get($prefix . $searchType . '-' . $urn . '-artwork_url');
+	$track{bpm} = $cache->get($prefix . $searchType . '-' . $urn . '-bpm');
+	$track{year} = $cache->get($prefix . $searchType . '-' . $urn . '-year');
+	$track{genre} = $cache->get($prefix . $searchType . '-' . $urn . '-genre');
+	$track{urn} = $urn;
+	$log->debug('_cacheReadTrack ID: ' . $track{'urn'} . ' ' . $urn);
 	$log->debug('_cacheReadTrack ended.');
 	return \%track;
 }
@@ -502,8 +502,8 @@ sub tracksHandler {
 
 	} elsif ($searchType eq 'releated') {
 		$quantity = API_MAX_ITEMS;
-		my $id = $passDict->{'id'} || '';
-		$resource = "tracks/$id/related";
+		my $urn = $passDict->{'urn'} || '';
+		$resource = "tracks/$urn/related";
 
 	} elsif ($searchType eq 'favorites') {
 		$resource = "users/$uid/likes/tracks";
@@ -639,16 +639,16 @@ sub metadata_provider {
 	$log->debug('metadata_provider started.');
 	my ( $client, $url, $args ) = @_;
 
-	my $id = track_key($url);
+	my $urn = track_key($url);
 	my $searchType = 'track';
-	if ( $cache->get($prefix . $searchType . '-' . $id)) {
-		$log->debug('Metadata cache hit on ID: ' . $id);
+	if ( $cache->get($prefix . $searchType . '-' . $urn)) {
+		$log->debug('Metadata cache hit on ID: ' . $urn);
 		my $params = $args->{params};
 		$params->{isFromCache} = 1;
 		$args->{params} = $params;
-		return _makeMetadata($client, _cacheReadTrack($id), $args);
+		return _makeMetadata($client, _cacheReadTrack($urn), $args);
 	} else {
-		$log->debug('Metadata cache miss. Fetching: ' . $id);
+		$log->debug('Metadata cache miss. Fetching: ' . $urn);
 		if ( !$client->master->pluginData('webapifetchingMeta') ) {
 			# The fetchMetadata method will invoke an asynchronous http request. This will
 			# start a timer that is linked with the method fetchMetadata. Kill any pending
@@ -791,7 +791,7 @@ sub _parsePlaylist {
 		type => 'playlist',
 		icon => $icon,
 		url => \&tracksHandler,
-		passthrough => [ { type => (exists $entry->{'tracks_uri'} ? 'playlisttracks' : 'playlists'), pid => $entry->{'id'}, parser => (exists $entry->{'tracks_uri'} ? \&_parseTracks : \&_parsePlaylistTracks) }],
+		passthrough => [ { type => (exists $entry->{'tracks_uri'} ? 'playlisttracks' : 'playlists'), pid => $entry->{'urn'}, parser => (exists $entry->{'tracks_uri'} ? \&_parseTracks : \&_parsePlaylistTracks) }],
 	};
 
 	$log->debug('_parsePlaylist ended.');
@@ -826,14 +826,14 @@ sub _parseFriend {
 	my $favorite_count = $entry->{'public_favorites_count'};
 	my $track_count = $entry->{'track_count'};
 	my $playlist_count = $entry->{'playlist_count'};
-	my $id = $entry->{'id'};
+	my $urn = $entry->{'urn'};
 
 	if ($favorite_count > 0) {
 		push @$menuEntries, {
 			name => string('PLUGIN_SQUEEZECLOUD_FAVORITES'),
 			type => 'playlist',
 			url => \&tracksHandler,
-			passthrough => [ { type => 'favorites', uid => $id, max => $favorite_count }],
+			passthrough => [ { type => 'favorites', uid => $urn, max => $favorite_count }],
 		};
 	}
 
@@ -842,7 +842,7 @@ sub _parseFriend {
 			name => string('PLUGIN_SQUEEZECLOUD_TRACKS'),
 			type => 'playlist',
 			url => \&tracksHandler,
-			passthrough => [ { type => 'tracks', uid => $id, max => $track_count }],
+			passthrough => [ { type => 'tracks', uid => $urn, max => $track_count }],
 		};
 	}
 
@@ -851,7 +851,7 @@ sub _parseFriend {
 			name => string('PLUGIN_SQUEEZECLOUD_PLAYLISTS'),
 			type => 'link',
 			url => \&tracksHandler,
-			passthrough => [ { type => 'playlists', uid => $id, max => $playlist_count,
+			passthrough => [ { type => 'playlists', uid => $urn, max => $playlist_count,
 			parser => \&_parsePlaylists } ]
 		};
 	}
@@ -872,7 +872,7 @@ sub _parseFriends {
 	for my $entry (@{$json->{'collection'}}) {
 		my $image = $entry->{'avatar_url'};
 		my $name = $entry->{'username'} || $entry->{'full_name'};
-		my $id = $entry->{'id'};
+		my $urn = $entry->{'urn'};
 
 		# Add the menu entry with the information for one friend.
 		push @$menuEntries, {
@@ -881,7 +881,7 @@ sub _parseFriends {
 			image => $image,
 			type => 'link',
 			url => \&tracksHandler,
-			passthrough => [ { type => 'friend', uid => $id, parser => \&_parseFriend} ]
+			passthrough => [ { type => 'friend', uid => $urn, parser => \&_parseFriend} ]
 		};
 	}
 
