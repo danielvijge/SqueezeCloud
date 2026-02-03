@@ -81,7 +81,7 @@ BEGIN {
 # Get the data related to this plugin and preset certain variables with
 # default values in case they are not set
 my $prefs = preferences('plugin.squeezecloud');
-$prefs->init({ refresh_token => "", playmethod => "stream" });
+$prefs->init({ refresh_token => "" });
 
 # This is called when squeezebox server loads the plugin.
 # It is used to initialize variables and the like.
@@ -226,9 +226,9 @@ sub _makeMetadata {
 			play => "soundcloud://" . $json->{'urn'},
 			#url  => $json->{'permalink_url'},
 			#link => "soundcloud://" . $json->{'urn'},
-			bitrate => '128kbps',
+			bitrate => '160kbps',
 			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-			type => 'MP3 (SoundCloud)',
+			type => 'AAC (SoundCloud)',
 			icon => $icon,
 			image => $icon,
 			cover => $icon,
@@ -251,9 +251,9 @@ sub _makeMetadata {
 			play => "soundcloud://" . $json->{'urn'},
 			#url  => $json->{'permalink_url'},
 			#link => "soundcloud://" . $json->{'urn'},
-			bitrate => '128kbps',
+			bitrate => '160kbps',
 			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-			type => 'MP3 (SoundCloud)',
+			type => 'AAC (SoundCloud)',
 			icon => $icon,
 			image => $icon,
 			cover => $icon,
@@ -363,32 +363,11 @@ sub _gotMetadata {
 
 	my $DATA = _makeMetadata($client, $json, $args );
 
-	my $ua = LWP::UserAgent->new(
-		requests_redirectable => [],
-	);
-
-	my $res = $ua->get( getStreamURL($json), Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
-
-	my $stream = $res->header( 'location' );
+	my $stream = Plugins::SqueezeCloud::ProtocolHandler::getStreamURL($json);
 
 	$log->debug('_gotMetadata ended.');
 
 	return;
-}
-
-# Returns either the stream URL or the download URL from the given JSON data.
-sub getStreamURL {
-	$log->debug('getStreamURL started.');
-	my $json = shift;
-
-	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
-		$log->debug('download_url: ' . $json->{'download_url'});
-		return $json->{'download_url'};
-	}
-	else {
-		$log->debug('stream_url: ' . $json->{'stream_url'});
-		return $json->{'stream_url'};
-	}
 }
 
 sub fetchMetadata {

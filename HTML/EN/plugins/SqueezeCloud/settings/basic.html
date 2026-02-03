@@ -36,14 +36,4 @@
 
 	[% END %]
 
-	[% WRAPPER setting title="PLUGIN_SQUEEZECLOUD_PLAYMETHOD" desc="PLUGIN_SQUEEZECLOUD_PLAYMETHOD_DESC" %]
-	<div class="prefDesc">
-		<select name="pref_playmethod" class="stdedit">
-			<option[% IF prefs.playmethod == 'stream' %] selected[% END %] value="stream">[% "PLUGIN_SQUEEZECLOUD_USE_STREAM_METHOD" | string %]</option>
-			<option[% IF prefs.playmethod == 'download' %] selected[% END %] value="download">[% "PLUGIN_SQUEEZECLOUD_USE_DOWNLOAD_METHOD" | string %]</option>
-		</select>
-	</div>
-
-	[% END %]
-
 [% PROCESS settings/footer.html %]

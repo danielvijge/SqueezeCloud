@@ -78,9 +78,9 @@ sub _makeMetadata {
 		play => "soundcloud://" . $json->{'urn'},
 		#url  => $json->{'permalink_url'},
 		#link => "soundcloud://" . $json->{'urn'},
-		bitrate => '128kbps',
+		bitrate => '160kbps',
 		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-		type => 'audio',
+		type => 'AAC (SoundCloud)',
 		icon => $icon,
 		image => $icon,
 		cover => $icon,
@@ -94,11 +94,37 @@ sub getStreamURL {
 	my $json = shift;
 	$log->debug('getStreamURL started.');
 
-	if ($prefs->get('playmethod') eq 'download' && exists($json->{'download_url'}) && defined($json->{'download_url'}) && $json->{'downloadable'} eq '1') {
-		return $json->{'download_url'};
+	my $ua = LWP::UserAgent->new(
+		requests_redirectable => [],
+	);
+
+	# Need to call the /streams endpoint for the tracks API endpoint. This returns an object with the different stream options
+	my $res = $ua->get($json->{'uri'}.'/streams', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+	my $stream_res = eval { from_json( $res->content ) };
+
+	if (exists $stream_res->{'hls_aac_160_url'}) {
+		$log->info('Found URL .'.$stream_res->{'hls_aac_160_url'}.', getting redirect location');
+
+		my $ua = LWP::UserAgent->new(
+			requests_redirectable => [],
+		);
+
+		my $res = $ua->get($stream_res->{'hls_aac_160_url'}, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+
+		my $redirector = $res->header( 'location' );
+
+		if (!$redirector) {
+			$log->error('Error: Failed to get redirect location from '.$stream_res->{'hls_aac_160_url'});
+			$log->info($res->status_line);
+			return;
+		}
+
+		$log->info('Final URL that can be played: '.$redirector);
+		return $redirector;
 	}
 	else {
-		return $json->{'stream_url'};
+		$log->error('Error: hls_aac_160_url could not be found in streams. Only available formats are ' . join(', ' , keys(%$stream_res)));
+		return;
 	}
 }
 
@@ -108,7 +134,7 @@ sub getBetterArtworkURL {
 	return $artworkURL;
 }
 
-sub getFormatForURL () { 'mp3' }
+sub getFormatForURL () { 'soundcloud' } # custom-convert type
 
 sub isRemote { 1 }
 
@@ -145,25 +171,13 @@ sub gotNextTrack {
 	$song->pluginData( $track );
 
 	my $stream = getStreamURL($track);
-	$log->info($stream);
 
-	my $ua = LWP::UserAgent->new(
-		requests_redirectable => [],
-	);
-
-	my $res = $ua->get($stream, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
-
-	my $redirector = $res->header( 'location' );
-
-	if (!$redirector) {
-		$log->error('Error: Failed to get redirect location from ' . $stream);
-		$log->debug($res->status_line);
-		$http->params->{'errorCallback'}->( 'PLUGIN_SQUEEZECLOUD_STREAM_FAILED', $track->{error} );
+	if (!$stream) {
+		$http->params->{'errorCallback'}->( 'PLUGIN_SQUEEZECLOUD_STREAM_FAILED', $track->{error} );	
 		return;
 	}
 
-	$log->debug('Redirecting stream to ' . $redirector);
-	$song->streamUrl($redirector);
+	$song->streamUrl($stream);
 
 	my $meta = _makeMetadata($track);
 	$song->duration( $meta->{duration} );
@@ -176,7 +190,7 @@ sub gotNextTrack {
 
 sub gotNextTrackError {
 	my $http = shift;
-
+	$log->error('Error getting track '.$http->url.' - '.$http->error);
 	$http->params->{errorCallback}->( 'PLUGIN_SQUEEZECLOUD_ERROR', $http->error );
 }
 
@@ -190,7 +204,7 @@ sub getNextTrack {
 	my ($urn) = $url =~ m{^soundcloud://(.*)$};
 
 	# Convert old id that might still be in favourites or cache to urn
-	$urn = 'soundcloud:tracks:'.$urn unless $url =~ /^soundcloud\:tracks\:/;
+	$urn = 'soundcloud:tracks:'.$urn unless $urn =~ /^soundcloud:tracks:/;
 
 	# Talk to SN and get the next track to play
 	my $trackURL = "https://api.soundcloud.com/tracks/" . $urn;

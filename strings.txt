@@ -60,12 +60,6 @@ PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD
 
 PLUGIN_SQUEEZECLOUD_CONNECT_WITH_SOUNDCLOUD_DESC
 	EN	Login with your SoundCloud account
-
-PLUGIN_SQUEEZECLOUD_PLAYMETHOD
-	EN	Play method
-
-PLUGIN_SQUEEZECLOUD_PLAYMETHOD_DESC
-	EN	Use stream method or download method to play tracks.<br/><br/>Note: If long tracks stop playing after 20-30 minutes, ensure "Advanced" > "Network" > "<i>Streaming mode for HTTP(S)</i>" is set to "<b>Persistent mode</b>" or "<b>Cache HTTP(S) streams on disk</b>".
 	
 PLUGIN_SQUEEZECLOUD_STREAM_FAILED
 	EN	Connection error
@@ -96,12 +90,6 @@ PLUGIN_SQUEEZECLOUD_LOGGED_IN_AS
 
 PLUGIN_SQUEEZECLOUD_LOG_OUT
 	EN	Log out
-
-PLUGIN_SQUEEZECLOUD_USE_STREAM_METHOD
-	EN	Always use stream method
-
-PLUGIN_SQUEEZECLOUD_USE_DOWNLOAD_METHOD
-	EN	Use download method if available
 
 PLUGIN_SQUEEZECLOUD_PLAYLIST
 	EN	Playlist
