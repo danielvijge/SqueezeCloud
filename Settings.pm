@@ -37,7 +37,7 @@ sub page {
 }
 
 sub prefs {
-	return (preferences('plugin.squeezecloud'), qw(playmethod));
+	return (preferences('plugin.squeezecloud'));
 }
 
 sub handler {
