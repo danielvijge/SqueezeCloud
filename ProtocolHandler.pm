@@ -103,7 +103,7 @@ sub getStreamURL {
 	my $stream_res = eval { from_json( $res->content ) };
 
 	if (exists $stream_res->{'hls_aac_160_url'}) {
-		$log->info('Found URL .'.$stream_res->{'hls_aac_160_url'}.', getting redirect location');
+		$log->info('Found URL '.$stream_res->{'hls_aac_160_url'}.', getting redirect location');
 
 		my $ua = LWP::UserAgent->new(
 			requests_redirectable => [],

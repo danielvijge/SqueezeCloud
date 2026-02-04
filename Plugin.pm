@@ -323,7 +323,7 @@ sub _gotMetadataError {
 	my $url    = $http->params('url');
 	my $error  = $http->error;
 
-	$log->is_debug && $log->debug( "Error fetching Web API metadata: $error" );
+	$log->error('Error fetching Web API metadata  from'.$url.' - '.$error);
 
 	$client->master->pluginData( webapifetchingMeta => 0 );
 
