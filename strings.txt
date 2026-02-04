@@ -117,3 +117,9 @@ PLUGIN_SQUEEZECLOUD_LIKED_PLAYLISTS
 
 PLUGIN_SQUEEZECLOUD_LIKED_TRACKS
 	EN	Liked tracks
+
+PLUGIN_SQUEEZECLOUD_NOTES
+	EN	Notes
+
+PLUGIN_SQUEEZECLOUD_PLAYING_INSTRUCTIONS
+	EN	<ul><li>ffmpeg must be installed on the server to convert the SoundCloud stream into a stream that can be played by LMS. See "Advanced" > "File Types" > "SoundCloud" for possible conversion options. Refer to your distribution how to install ffmpeg.</li><li>If long tracks stop playing after 20-30 minutes, ensure "Advanced" > "Network" > "<i>Streaming mode for HTTP(S)</i>" is set to "<b>Persistent mode</b>" or "<b>Cache HTTP(S) streams on disk</b></ul>
