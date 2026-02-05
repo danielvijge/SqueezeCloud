@@ -3,14 +3,14 @@
     <title lang="EN">SoundCloud Plugin</title>
   </details>
   <plugins>
-    <plugin name="SqueezeCloud" version="0.18.7-dev" minTarget="7.5" maxTarget="*">
+    <plugin name="SqueezeCloud" version="0.19" minTarget="7.5" maxTarget="*">
       <title lang="EN">SoundCloud</title>
       <category>musicservices</category>
       <icon>https://raw.githubusercontent.com/danielvijge/SqueezeCloud/master/HTML/EN/plugins/SqueezeCloud/html/images/icon.png</icon>
       <desc lang="EN">Play music from SoundCloud</desc>
-      <url>https://danielvijge.github.io/SqueezeCloud/dev-builds/SqueezeCloud-0.18.7-dev.zip</url>
+      <url>https://github.com/danielvijge/SqueezeCloud/releases/download/0.19/SqueezeCloud-0.19.zip</url>
       <link>https://github.com/danielvijge/SqueezeCloud</link>
-      <sha>666dc42183c5261a3627bc5ffa7d56c70cd06256</sha>
+      <sha>86f7e08ab7d0a27ccfa573f85428e76d347806d3</sha>
       <creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman, KwarkLabs</creator>
     </plugin>
   </plugins>
