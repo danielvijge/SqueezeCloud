@@ -134,7 +134,7 @@ sub getBetterArtworkURL {
 	return $artworkURL;
 }
 
-sub getFormatForURL () { 'soundcloud' } # custom-convert type
+sub getFormatForURL { 'soundcloud' } # custom-convert type
 
 sub isRemote { 1 }
 
