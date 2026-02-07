@@ -92,12 +92,11 @@ jobs:
       - name: Create release
         if: env.RELEASE_CHANNEL == 'release'
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ env.VERSION }}
+          name: Release ${{ env.VERSION }}
+          files: |
+            SqueezeCloud-${{ env.VERSION }}.zip
           draft: false
           prerelease: false
 
