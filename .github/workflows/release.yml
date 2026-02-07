@@ -71,10 +71,12 @@ jobs:
           mv public*.xml /tmp
           mv SqueezeCloud-${{ env.VERSION }}.zip /tmp
           git checkout gh-pages
+          cp /tmp/SqueezeCloud-${{ env.VERSION }}.zip ${{ env.FOLDER }}/
           cp /tmp/public*.xml .
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           if [ "${{ env.RELEASE_CHANNEL }}" == "dev" ]; then
+            git add ${{ env.FOLDER }}/SqueezeCloud-${{ env.VERSION }}.zip
             COMMIT_MESSAGE_TYPE="development build"
           else
             COMMIT_MESSAGE_TYPE="release"
@@ -88,11 +90,25 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create release
+        if: env.RELEASE_CHANNEL == 'release'
         id: create_release
-        uses: softprops/action-gh-release@v2
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
         with:
-          name: Release ${{ env.VERSION }}
-          files: |
-            SqueezeCloud-${{ env.VERSION }}.zip
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ env.VERSION }}
           draft: false
-          prerelease: env.RELEASE_CHANNEL == 'dev'
+          prerelease: false
+
+      - name: Upload Release Asset
+        if: env.RELEASE_CHANNEL == 'release'
+        id: upload-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: SqueezeCloud-${{ env.VERSION }}.zip
+          asset_name: SqueezeCloud-${{ env.VERSION }}.zip
+          asset_content_type: application/zip
