@@ -40,8 +40,8 @@ use constant API_DEFAULT_ITEMS_COUNT => 50;
 # It is not advisable to increase this value.
 use constant API_MAX_ITEMS => 200;
 
-# Which URLs should we catch when pasted into the "Tune In URL" field?
-use constant PAGE_URL_REGEXP => qr{^https?://soundcloud\.com/};
+# Which URLs should we catch when pasted into the "Tune In URL" field? Support main domain and all possible subdomains
+use constant PAGE_URL_REGEXP => qr{^https?://((\S)+\.)?soundcloud\.com/};
 
 use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
 
