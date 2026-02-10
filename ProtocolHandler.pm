@@ -102,30 +102,33 @@ sub getStreamURL {
 	my $res = $ua->get($json->{'uri'}.'/streams', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 	my $stream_res = eval { from_json( $res->content ) };
 
-	if (exists $stream_res->{'hls_aac_160_url'}) {
-		$log->info('Found URL '.$stream_res->{'hls_aac_160_url'}.', getting redirect location');
+	# Define the different formats supported in order of preference
+	foreach ('hls_aac_160_url', 'hls_aac_96_url', 'hls_mp3_128_url', 'http_mp3_128_url') {
+		my $format = $_;
+		if (exists $stream_res->{$format}) {
+			$log->info('Found format '.$format.', URL '.$stream_res->{$format}.', getting redirect location');
 
-		my $ua = LWP::UserAgent->new(
-			requests_redirectable => [],
-		);
+			my $ua = LWP::UserAgent->new(
+				requests_redirectable => [],
+			);
 
-		my $res = $ua->get($stream_res->{'hls_aac_160_url'}, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+			my $res = $ua->get($stream_res->{$format}, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
-		my $redirector = $res->header( 'location' );
+			my $redirector = $res->header( 'location' );
 
-		if (!$redirector) {
-			$log->error('Error: Failed to get redirect location from '.$stream_res->{'hls_aac_160_url'});
-			$log->info($res->status_line);
-			return;
+			if (!$redirector) {
+				$log->warn('Warning: Failed to get redirect location for '.$format.' from '.$stream_res->{$format});
+				$log->info($res->status_line);
+				next;
+			}
+
+			$log->info('Final URL that can be played: '.$redirector);
+			return $redirector;
 		}
-
-		$log->info('Final URL that can be played: '.$redirector);
-		return $redirector;
 	}
-	else {
-		$log->error('Error: hls_aac_160_url could not be found in streams. Only available formats are ' . join(', ' , keys(%$stream_res)));
-		return;
-	}
+	
+	$log->error('Error: correct format could not be found in streams. Only available formats are ' . join(', ' , keys(%$stream_res)));
+	return;
 }
 
 sub getBetterArtworkURL {
