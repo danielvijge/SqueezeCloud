@@ -10,7 +10,7 @@
       <desc lang="EN">Play music from SoundCloud</desc>
       <url>https://github.com/danielvijge/SqueezeCloud/releases/download/0.21/SqueezeCloud-0.21.zip</url>
       <link>https://github.com/danielvijge/SqueezeCloud</link>
-      <sha>69070a86bfe46415b8d7c8767f2920b75de68acb</sha>
+      <sha>8e24f150d8e4281801dcb7184b8745ba4cc4acab</sha>
       <creator>Robert Siebert, Daniel Vijge, Robert Gibbon, David Blackman, KwarkLabs</creator>
     </plugin>
   </plugins>
