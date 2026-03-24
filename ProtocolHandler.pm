@@ -53,7 +53,13 @@ my $prefs = preferences('plugin.squeezecloud');
 
 my $prefix = 'sc:';
 
-sub canSeek { 0 }
+sub canSeek { 1 }
+sub canTranscodeSeek { 1 }
+
+sub getSeekData {
+	my ($class, $client, $song, $newtime) = @_;
+	return { timeOffset => $newtime };
+}
 
 sub _makeMetadata {
 	my ($json) = shift;
@@ -138,6 +144,18 @@ sub getBetterArtworkURL {
 }
 
 sub getFormatForURL { 'soundcloud' } # custom-convert type
+
+sub formatOverride {
+	my ($class, $song) = @_;
+
+	my $track = $song->pluginData();
+	if ($track && $track->{'uri'}) {
+		my $stream = getStreamURL($track);
+		$song->streamUrl($stream) if $stream;
+	}
+
+	return 'soundcloud';
+}
 
 sub isRemote { 1 }
 
