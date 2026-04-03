@@ -53,7 +53,14 @@ my $prefs = preferences('plugin.squeezecloud');
 
 my $prefix = 'sc:';
 
-sub canSeek { 0 }
+sub canSeek { 1 }
+
+sub canTranscodeSeek { 1 }
+
+sub getSeekData {
+	my ($class, $client, $song, $newtime) = @_;
+	return { timeOffset => $newtime };
+}
 
 sub _makeMetadata {
 	my ($json) = shift;
@@ -138,6 +145,26 @@ sub getBetterArtworkURL {
 }
 
 sub getFormatForURL { 'soundcloud' } # custom-convert type
+
+# When seeking, fetch the URL again. SoundCloud streams have an expiry time. Seeking
+# forward should not cause an issue, as the end of the song will always be before
+# the expiry time. But seeking backwards and then playing until the end could result
+# in the end of the song being after the expiry time. By refreshing the URL when
+# seeking this problem is avoided. Using `formatOverride()` might not be the
+# proper solution for this, but it appears this custom function from a plugin
+# happens to be called at the right time.
+# Ref: https://github.com/LMS-Community/slimserver/blob/91c0d2f13929b57fc5d06a2cd7b4ea40be597547/Slim/Player/Song.pm#L377
+sub formatOverride {
+	my ($class, $song) = @_;
+
+	my $track = $song->pluginData();
+	if ($track && $track->{'uri'}) {
+		my $stream = getStreamURL($track);
+		$song->streamUrl($stream) if $stream;
+	}
+
+	return 'soundcloud';
+}
 
 sub isRemote { 1 }
 
