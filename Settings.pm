@@ -12,6 +12,8 @@ package Plugins::SqueezeCloud::Settings;
 use strict;
 use base qw(Slim::Web::Settings);
 
+use URI::Escape qw(uri_escape_utf8);
+
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 use Slim::Utils::Cache;
@@ -95,7 +97,7 @@ sub handler {
 		$log->debug('Generating code and code challenge');
 		my $codeChallenge = Plugins::SqueezeCloud::Oauth2::getCodeChallenge;
 		$params->{codeChallenge} = $codeChallenge;
-		$params->{hostName} = Slim::Utils::Misc::getLibraryName();
+		$params->{hostName} = uri_escape_utf8(Slim::Utils::Misc::getLibraryName()) =~ s/'/%27/r;
 
 		$callback->($client, $params, $class->SUPER::handler($client, $params), @args);
 	}
