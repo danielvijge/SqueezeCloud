@@ -27,7 +27,7 @@ function copyTextToClipboard() {
 var code = getQueryVariable('code');
 var state = getQueryVariable('state');
 if (!!code && !!state) {
-  document.write('Your code for ' + state + ' is:<br/>');
+  document.write('Your code for ' + decodeURI(state) + ' is:<br/>');
   document.write('<input type="text" id="code" value="'+code+'"/>');
   document.write('<button onclick="copyTextToClipboard()">Copy to clipboard</button>');
 } else {
