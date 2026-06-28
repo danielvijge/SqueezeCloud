@@ -173,7 +173,7 @@ sub _makeMetadata {
 		duration => $json->{'duration'} / 1000,
 		name => $json->{'title'},
 		title => $json->{'title'},
-		artist => $json->{'metadata_artist'},
+		artist => _getArtist($json),
 		album => "SoundCloud",
 		play => "soundcloud://" . $json->{'urn'},
 		#url  => $json->{'permalink_url'},
@@ -233,12 +233,18 @@ sub _getYear {
 	}
 }
 
+sub _getArtist {
+	my ( $json ) = @_;
+	return $json->{'metadata_artist'} || $json->{'user'}->{'username'} || '';
+}
+
 sub _advancedMenuItems {
 	$log->debug('_advancedMenuItems started.');
 	my ( $client, $json, $fromMakeMetaData ) = @_;
 
 	my $trackinfo = [];
 
+	my $artist =  _getArtist($json);
 	my $duration = _formatDuration($json);
 	my $year = _getYear($json);
 
@@ -253,9 +259,9 @@ sub _advancedMenuItems {
 		} if $json->{'title'};
 
 		push @$trackinfo, {
-			name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $json->{'metadata_artist'},
+			name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $artist,
 			type => 'text',
-		} if $json->{'metadata_artist'};
+		} if $artist;
 
 		push @$trackinfo, {
 			name => cstring($client, 'LENGTH') . cstring($client, 'COLON') . ' ' . $duration,
