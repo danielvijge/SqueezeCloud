@@ -42,7 +42,7 @@ use base 'Slim::Player::Protocols::HTTP';
 
 # Defines the timeout in seconds for a http request
 use constant HTTP_TIMEOUT => 15;
-use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
+use constant STREAM_CACHE_TTL => 30; # stream URLs are valid only for a short period
 
 use IO::Socket::SSL;
 IO::Socket::SSL::set_defaults(
@@ -62,41 +62,6 @@ sub getSeekData {
 	return { timeOffset => $newtime };
 }
 
-sub _makeMetadata {
-	my ($json) = shift;
-
-	$log->debug('ProtocolHandler _makeMetadata started.');
-
-	my $year;
-	if (int($json->{'release_year'}) > 0) {
-		$year = int($json->{'release_year'});
-	} elsif ($json->{'created_at'}) {
-		$year = substr $json->{'created_at'}, 0, 4;
-	}
-
-	my $icon = getBetterArtworkURL($json->{'artwork_url'} || "");
-	my $DATA = {
-		urn => $json->{'urn'},
-		duration => $json->{'duration'} / 1000,
-		name => $json->{'title'},
-		title => $json->{'title'},
-		artist => $json->{'user'}->{'username'},
-		album => "SoundCloud",
-		play => "soundcloud://" . $json->{'urn'},
-		#url  => $json->{'permalink_url'},
-		#link => "soundcloud://" . $json->{'urn'},
-		bitrate => '160kbps',
-		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-		type => 'AAC (SoundCloud)',
-		icon => $icon,
-		image => $icon,
-		cover => $icon,
-		year => ($year ? $year : ''),
-		on_select => 'play',
-		genre => $json->{'genre'},
-	};
-}
-
 sub getStreamURL {
 	my $json = shift;
 	$log->debug('getStreamURL started.');
@@ -105,8 +70,18 @@ sub getStreamURL {
 		requests_redirectable => [],
 	);
 
+	my $queryUrl = $json->{'uri'}.'/streams';
+
+	my $cachedStreamUrl = $cache->get($queryUrl);
+	if ($cachedStreamUrl) {
+		$log->debug('Return stream URL from cache');
+		return $cachedStreamUrl;
+	}
+
+	$log->info('SoundCloud API call to ' . $queryUrl);
+
 	# Need to call the /streams endpoint for the tracks API endpoint. This returns an object with the different stream options
-	my $res = $ua->get($json->{'uri'}.'/streams', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+	my $res = $ua->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 	my $stream_res = eval { from_json( $res->content ) };
 
 	# Define the different formats supported in order of preference
@@ -119,6 +94,7 @@ sub getStreamURL {
 				requests_redirectable => [],
 			);
 
+			$log->info('SoundCloud API call to ' . $stream_res->{$format});
 			my $res = $ua->get($stream_res->{$format}, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
 			my $redirector = $res->header( 'location' );
@@ -130,10 +106,11 @@ sub getStreamURL {
 			}
 
 			$log->info('Final URL that can be played: '.$redirector);
+			$cache->set($queryUrl, $redirector, STREAM_CACHE_TTL);
 			return $redirector;
 		}
 	}
-	
+
 	$log->error('Error: correct format could not be found in streams. Only available formats are ' . join(', ' , keys(%$stream_res)));
 	return;
 }
@@ -217,9 +194,6 @@ sub gotNextTrack {
 	my $meta = Plugins::SqueezeCloud::Plugin::_makeMetadata($client, $track, $args);
 	$song->duration( $meta->{duration} );
 
-	$log->info("setting ". 'soundcloud_meta_' . $track->{urn});
-	$cache->set($prefix . 'track' . '-' . $track->{urn} , $meta, META_CACHE_TTL);
-
 	$http->params->{callback}->();
 	$log->debug('gotNextTrack ended.');
 }
@@ -265,7 +239,7 @@ sub getNextTrack {
 		},
 	);
 
-	$log->info("Getting track from soundcloud for $urn using $trackURL");
+	$log->info('SoundCloud API call to '.$trackURL);
 
 	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 	$log->debug('getNextTrack ended.');
@@ -342,7 +316,7 @@ sub handleDirectError {
 	my ( $class, $client, $url, $response, $status_line ) = @_;
 	$log->debug('handleDirectError started.');
 
-	main::INFOLOG && $log->info("Direct stream failed: $url [$response] $status_line");
+	$log->warn("Warning: Direct stream failed: $url [$response] $status_line");
 
 	$client->controller()->playerStreamingFailed( $client, 'PLUGIN_SQUEEZECLOUD_STREAM_FAILED' );
 	$log->debug('handleDirectError ended.');
