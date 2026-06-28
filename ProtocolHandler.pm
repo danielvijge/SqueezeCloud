@@ -42,7 +42,7 @@ use base 'Slim::Player::Protocols::HTTP';
 
 # Defines the timeout in seconds for a http request
 use constant HTTP_TIMEOUT => 15;
-use constant META_CACHE_TTL => 86400 * 30; # 24 hours x 30 = 30 days
+use constant STREAM_CACHE_TTL => 30; # stream URLs are valid only for a short period
 
 use IO::Socket::SSL;
 IO::Socket::SSL::set_defaults(
@@ -62,41 +62,6 @@ sub getSeekData {
 	return { timeOffset => $newtime };
 }
 
-sub _makeMetadata {
-	my ($json) = shift;
-
-	$log->debug('ProtocolHandler _makeMetadata started.');
-
-	my $year;
-	if (int($json->{'release_year'}) > 0) {
-		$year = int($json->{'release_year'});
-	} elsif ($json->{'created_at'}) {
-		$year = substr $json->{'created_at'}, 0, 4;
-	}
-
-	my $icon = getBetterArtworkURL($json->{'artwork_url'} || "");
-	my $DATA = {
-		urn => $json->{'urn'},
-		duration => $json->{'duration'} / 1000,
-		name => $json->{'title'},
-		title => $json->{'title'},
-		artist => $json->{'user'}->{'username'},
-		album => "SoundCloud",
-		play => "soundcloud://" . $json->{'urn'},
-		#url  => $json->{'permalink_url'},
-		#link => "soundcloud://" . $json->{'urn'},
-		bitrate => '160kbps',
-		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-		type => 'AAC (SoundCloud)',
-		icon => $icon,
-		image => $icon,
-		cover => $icon,
-		year => ($year ? $year : ''),
-		on_select => 'play',
-		genre => $json->{'genre'},
-	};
-}
-
 sub getStreamURL {
 	my $json = shift;
 	$log->debug('getStreamURL started.');
@@ -105,8 +70,18 @@ sub getStreamURL {
 		requests_redirectable => [],
 	);
 
+	my $queryUrl = $json->{'uri'}.'/streams';
+
+	my $cachedStreamUrl = $cache->get($queryUrl);
+	if ($cachedStreamUrl) {
+		$log->debug('Return stream URL from cache');
+		return $cachedStreamUrl;
+	}
+
+	$log->info('SoundCloud API call to ' . $queryUrl);
+
 	# Need to call the /streams endpoint for the tracks API endpoint. This returns an object with the different stream options
-	my $res = $ua->get($json->{'uri'}.'/streams', Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+	my $res = $ua->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 	my $stream_res = eval { from_json( $res->content ) };
 
 	# Define the different formats supported in order of preference
@@ -119,6 +94,7 @@ sub getStreamURL {
 				requests_redirectable => [],
 			);
 
+			$log->info('SoundCloud API call to ' . $stream_res->{$format});
 			my $res = $ua->get($stream_res->{$format}, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
 
 			my $redirector = $res->header( 'location' );
@@ -130,10 +106,11 @@ sub getStreamURL {
 			}
 
 			$log->info('Final URL that can be played: '.$redirector);
+			$cache->set($queryUrl, $redirector, STREAM_CACHE_TTL);
 			return $redirector;
 		}
 	}
-	
+
 	$log->error('Error: correct format could not be found in streams. Only available formats are ' . join(', ' , keys(%$stream_res)));
 	return;
 }
@@ -170,7 +147,9 @@ sub isRemote { 1 }
 
 sub scanUrl {
 	my ($class, $url, $args) = @_;
+	$log->debug('scanUrl started.');
 	$args->{cb}->( $args->{song}->currentTrack() );
+	$log->debug('scanUrl ended.');
 }
 
 sub gotNextTrack {
@@ -178,6 +157,8 @@ sub gotNextTrack {
 	my $client = $http->params->{client};
 	my $song   = $http->params->{song};
 	my $url    = $song->currentTrack()->url;
+	$log->debug('gotNextTrack started.');
+
 	my $track  = eval { from_json( $http->content ) };
 
 	if ( $@ || $track->{error} ) {
@@ -209,23 +190,25 @@ sub gotNextTrack {
 
 	$song->streamUrl($stream);
 
-	my $meta = _makeMetadata($track);
+	my $args = { params => {isProtocolHandler => 1}};
+	my $meta = Plugins::SqueezeCloud::Plugin::_makeMetadata($client, $track, $args);
 	$song->duration( $meta->{duration} );
 
-	$log->info("setting ". 'soundcloud_meta_' . $track->{urn});
-	$cache->set($prefix . 'track' . '-' . $track->{urn} , $meta, META_CACHE_TTL);
-
 	$http->params->{callback}->();
+	$log->debug('gotNextTrack ended.');
 }
 
 sub gotNextTrackError {
 	my $http = shift;
+	$log->debug('gotNextTrackError started.');
 	$log->error('Error getting track '.$http->url.' - '.$http->error);
 	$http->params->{errorCallback}->( 'PLUGIN_SQUEEZECLOUD_ERROR', $http->error );
+	$log->debug('gotNextTrackError ended.');
 }
 
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
+	$log->debug('getNextTrack started.');
 
 	my $client = $song->master();
 	my $url    = $song->currentTrack()->url;
@@ -256,15 +239,18 @@ sub getNextTrack {
 		},
 	);
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $urn");
+	$log->info('SoundCloud API call to '.$trackURL);
 
 	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+	$log->debug('getNextTrack ended.');
 }
 
 # To support remote streaming (synced players, slimp3/SB1), we need to subclass Protocols::HTTP
 sub new {
 	my $class  = shift;
 	my $args   = shift;
+
+	$log->debug('new started.');
 
 	my $client = $args->{client};
 
@@ -282,6 +268,7 @@ sub new {
 
 	${*$sock}{contentType} = 'audio/mpeg';
 
+	$log->debug('new ended.');
 	return $sock;
 }
 
@@ -289,44 +276,55 @@ sub new {
 # Track Info menu
 sub trackInfo {
 	my ( $class, $client, $track ) = @_;
+	$log->debug('trackInfo started.');
 
 	my $url = $track->url;
-	$log->info("trackInfo: " . $url);
+	$log->debug("trackInfo: " . $url);
+	$log->debug('trackInfo ended.');
 }
 
 # Track Info menu
 sub trackInfoURL {
 	my ( $class, $client, $url ) = @_;
-	$log->info("trackInfoURL: " . $url);
+	$log->debug('trackInfoUrl started.');
+	$log->debug("trackInfoURL: " . $url);
+	$log->debug('trackInfoUrl ended.');
 	return undef;
 }
 
 # Metadata for a URL, used by CLI/JSON clients
 sub getMetadataFor {
 	my ( $class, $client, $url ) = @_;
+	$log->debug('getMetadataFor started.');
 	my $args = { params => {isProtocolHandler => 1}};
+	$log->debug('getMetadataFor ended.');
 	return Plugins::SqueezeCloud::Plugin::metadata_provider($client, $url, $args);
 }
 
 sub canDirectStreamSong {
 	my ( $class, $client, $song ) = @_;
+	$log->debug('canDirectStreamSong started.');
 
 	# We need to check with the base class (HTTP) to see if we
 	# are synced or if the user has set mp3StreamingMethod
+	$log->debug('canDirectStreamSong ended.');
 	return $class->SUPER::canDirectStream( $client, $song->streamUrl(), $class->getFormatForURL() );
 }
 
 # If an audio stream fails, keep playing
 sub handleDirectError {
 	my ( $class, $client, $url, $response, $status_line ) = @_;
+	$log->debug('handleDirectError started.');
 
-	main::INFOLOG && $log->info("Direct stream failed: $url [$response] $status_line");
+	$log->warn("Warning: Direct stream failed: $url [$response] $status_line");
 
 	$client->controller()->playerStreamingFailed( $client, 'PLUGIN_SQUEEZECLOUD_STREAM_FAILED' );
+	$log->debug('handleDirectError ended.');
 }
 
 sub explodePlaylist {
 	my ( $class, $client, $uri, $callback ) = @_;
+	$log->debug('explodePlaylist started.');
 
 	if ( $uri =~ Plugins::SqueezeCloud::Plugin::PAGE_URL_REGEXP ) {
 		Plugins::SqueezeCloud::Plugin::urlHandler(
@@ -338,6 +336,7 @@ sub explodePlaylist {
 	else {
 		$callback->([$uri]);
 	}
+	$log->debug('explodePlaylist ended.');
 }
 
 1;

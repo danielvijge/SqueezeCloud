@@ -118,6 +118,11 @@ sub initPlugin {
 		PAGE_URL_REGEXP() => 'Plugins::SqueezeCloud::ProtocolHandler'
 	) if Slim::Player::ProtocolHandlers->can('registerURLHandler');
 
+	Slim::Menu::TrackInfo->registerInfoProvider( soundcloudinfo => (
+		func => \&_trackInfoHandler,
+		after => 'remotetitle'
+	));
+
 	$log->debug('initPlugin ended.');
 }
 
@@ -163,45 +168,146 @@ sub _makeMetadata {
 		$icon =~ s/-large/-t500x500/g;
 	}
 
-	my $trackinfo = [];
-
-	my $duration;
-	if ($json->{'duration'}) {
-		$duration = $json->{'duration'} / 1000;
-		$duration = sprintf('%s:%02s', int($duration / 60), int($duration % 60));
+	my $DATA = {
+		urn => $json->{'urn'},
+		duration => $json->{'duration'} / 1000,
+		name => $json->{'title'},
+		title => $json->{'title'},
+		artist => $json->{'metadata_artist'},
+		album => "SoundCloud",
+		play => "soundcloud://" . $json->{'urn'},
+		#url  => $json->{'permalink_url'},
+		#link => "soundcloud://" . $json->{'urn'},
+		bitrate => '160kbps',
+		bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
+		type => 'AAC (SoundCloud)',
+		icon => $icon,
+		image => $icon,
+		cover => $icon,
+		year => _getYear($json),
+		on_select => 'play',
+		genre => $json->{'genre'},
+	};
+	
+	if (!$simpleTracks) {
+		$log->debug('Use more advanced menu for track');
+		my $year = _getYear($json);
+		my $duration = _formatDuration($json);
+		# line1 and line2 are used in browse view
+		# artist and title are used in the now playing and playlist views
+		$DATA->{'line1'} = $json->{'title'} . ' (' . $duration . ')';
+		$DATA->{'line2'} = $json->{'user'}->{'username'} . ( $year ? ' (' . $year . ')' : '');
+		$DATA->{'title'} = $json->{'title'} . ' (' . $duration . ')';
+		$DATA->{'items'} = _advancedMenuItems($client, $json, 1);
+		$DATA->{'playall'} = 0;
+		$DATA->{'passthrough'} = [{
+			track_urn => $json->{'urn'}
+		}];
 	}
 
+	if (!$isFromCache) {
+		# Re-write the cache data here to reset TTL but also because it might not be complete and it might have changed.
+		_cacheWriteTrack($json);
+	}
+
+	$log->debug('_makeMetadata ended.');
+
+	return \%$DATA;
+}
+
+sub _formatDuration {
+	my ( $json ) = @_;
+	if ($json->{'duration'}) {
+		my $duration = $json->{'duration'} / 1000;
+		return sprintf('%s:%02s', int($duration / 60), int($duration % 60));
+	}
+}
+
+sub _getYear {
+	my ( $json ) = @_;
 	my $year;
 	if (int($json->{'release_year'}) > 0) {
-		$year = int($json->{'release_year'});
+		return int($json->{'release_year'});
 	} elsif ($json->{'created_at'}) {
-		$year = substr $json->{'created_at'}, 0, 4;
+		return substr $json->{'created_at'}, 0, 4;
+	}
+}
+
+sub _advancedMenuItems {
+	$log->debug('_advancedMenuItems started.');
+	my ( $client, $json, $fromMakeMetaData ) = @_;
+
+	my $trackinfo = [];
+
+	my $duration = _formatDuration($json);
+	my $year = _getYear($json);
+
+	# fromMakeMetaData is passed from _makeMetaData(). When passes from that function
+	# all items are added to the list. When this function is called from _trackInfoHandler()
+	# only some items are added, as the default track info already adds a lot of these items
+	# and there should be no duplicates.
+	if ($fromMakeMetaData) {
+		push @$trackinfo, {
+			name => cstring($client, 'TITLE') . cstring($client, 'COLON') . ' ' . $json->{'title'},
+			type => 'text',
+		} if $json->{'title'};
+
+		push @$trackinfo, {
+			name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $json->{'metadata_artist'},
+			type => 'text',
+		} if $json->{'metadata_artist'};
+
+		push @$trackinfo, {
+			name => cstring($client, 'LENGTH') . cstring($client, 'COLON') . ' ' . $duration,
+			type => 'text',
+		} if $duration;
+	
+		push @$trackinfo, {
+			name => cstring($client, 'YEAR') . cstring($client, 'COLON') . ' ' . $year,
+			type => 'text',
+		} if $year;
+
+		push @$trackinfo, {
+			name => cstring($client, 'GENRE') . cstring($client, 'COLON') . ' ' . $json->{'genre'},
+			type => 'text',
+		} if $json->{'genre'};
+
+		push @$trackinfo, {
+			name => cstring($client, 'BPM') . cstring($client, 'COLON') . ' ' . $json->{'bpm'},
+			type => 'text',
+		} if $json->{'bpm'};
+
+		push @$trackinfo, {
+			name => cstring($client, 'TYPE') . cstring($client, 'COLON') . ' AAC (SoundCloud)',
+			type => 'text',
+		};
+
+		push @$trackinfo, {
+			name => cstring($client, 'BITRATE') . cstring($client, 'COLON') . ' 160' . cstring($client, 'KBPS'),
+			type => 'text',
+		};
 	}
 
 	push @$trackinfo, {
-		name => cstring($client, 'LENGTH') . cstring($client, 'COLON') . ' ' . $duration,
-		type => 'text',
-	} if $duration;
-
-	push @$trackinfo, {
-		name => cstring($client, 'YEAR') . cstring($client, 'COLON') . ' ' . $year,
-		type => 'text',
-	} if $year;
-
-	push @$trackinfo, {
-		name => cstring($client, 'GENRE') . cstring($client, 'COLON') . ' ' . $json->{'genre'},
-		type => 'text',
-	} if $json->{'genre'};
+		name => cstring($client, 'DESCRIPTION'),
+		items => [
+			{
+				name => $json->{'description'},
+				type => 'text',
+			}
+		]
+	} if $json->{'description'};
 
 	# It is a requirement of the SoundCloud API Terms to include this link.
 	push @$trackinfo, {
 		name => string('PLUGIN_SQUEEZECLOUD_LINK') . cstring($client, 'COLON') . ' ' . $json->{'permalink_url'},
+		weblink => $json->{'permalink_url'},
 		type => 'text',
 	} if $json->{'permalink_url'};
 
 	push @$trackinfo, {
 		type => 'link',
-		name => cstring($client, 'ARTIST') . cstring($client, 'COLON') . ' ' . $json->{'user'}->{'username'},
+		name => cstring($client, 'PLUGIN_SQUEEZECLOUD_CHANNEL') . cstring($client, 'COLON') . ' ' . $json->{'user'}->{'username'},
 		url  => \&tracksHandler,
 		passthrough => [ { uid => $json->{'user'}->{'urn'}, type => 'friend', parser => \&_parseFriend } ]
 	} if $json->{'user'}->{'urn'};
@@ -210,108 +316,55 @@ sub _makeMetadata {
 		type => 'link',
 		name => string('PLUGIN_SQUEEZECLOUD_RELATED'),
 		url  => \&tracksHandler,
-		passthrough => [ { urn => $json->{'urn'}, type => 'releated', parser => \&_parseTracks } ]
+		passthrough => [ { urn => $json->{'urn'}, type => 'related', parser => \&_parseTracks } ]
 	} if $json->{'user'}->{'urn'};
 
-	my $DATA;
-	if ($simpleTracks) {
-		$log->debug('_makeMetadata simpleTracks used.');
-		$DATA = {
-			urn => $json->{'urn'},
-			duration => $json->{'duration'} / 1000,
-			name => $json->{'title'},
-			title => $json->{'title'},
-			artist => $json->{'user'}->{'username'},
-			album => "SoundCloud",
-			play => "soundcloud://" . $json->{'urn'},
-			#url  => $json->{'permalink_url'},
-			#link => "soundcloud://" . $json->{'urn'},
-			bitrate => '160kbps',
-			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-			type => 'AAC (SoundCloud)',
-			icon => $icon,
-			image => $icon,
-			cover => $icon,
-			year => ($year ? $year : ''),
-			on_select => 'play',
-			genre => $json->{'genre'},
-		}
-	} else {
-		$DATA = {
-			urn => $json->{'urn'},
-			duration => $json->{'duration'} / 1000,
-			name => $json->{'title'},
-			# line1 and line2 are used in browse view
-			# artist and title are used in the now playing and playlist views
-			line1 => $json->{'user'}->{'username'} && $json->{'title'} . ' (' . $duration . ')',
-			line2 => $json->{'user'}->{'username'} . ( $year ? ' (' . $year . ')' : ''),
-			title => $json->{'title'} . ' (' . $duration . ')',
-			artist => $json->{'user'}->{'username'},
-			album => "SoundCloud",
-			play => "soundcloud://" . $json->{'urn'},
-			#url  => $json->{'permalink_url'},
-			#link => "soundcloud://" . $json->{'urn'},
-			bitrate => '160kbps',
-			bpm => (int($json->{'bpm'}) > 0 ? int($json->{'bpm'}) : ''),
-			type => 'AAC (SoundCloud)',
-			icon => $icon,
-			image => $icon,
-			cover => $icon,
-			year => ($year ? $year : ''),,
-			on_select => 'play',
-			genre => $json->{'genre'},
-			items => $trackinfo,
-			playall     => 0,
-			passthrough => [{
-				track_urn => $json->{'urn'}
-			}]
-		}
+	push @$trackinfo, {
+		name => string('PLUGIN_SQUEEZECLOUD_LABEL') . cstring($client, 'COLON') . ' ' . $json->{'label_name'},
+		type => 'text',
+	} if $json->{'label_name'};
+
+	if ($json->{'release_year'} && $json->{'release_month'} && $json->{'release_day'}) {
+		my $releaseDate = Slim::Utils::DateTime::longDateF(Date::Parse::str2time("$json->{'release_year'}-$json->{'release_month'}-$json->{'release_day'}"));
+		push @$trackinfo, {
+			name => string('PLUGIN_SQUEEZECLOUD_RELEASE_DATE') . cstring($client, 'COLON') . ' ' . $releaseDate,
+			type => 'text',
+		};
 	}
 
-	if (!$isFromCache) {
-		# Re-write the cache data here to reset TTL but also because it might not be complete and it might have changed.
-		_cacheWriteTrack($DATA);
-	}
+	push @$trackinfo, {
+		name => string('PLUGIN_SQUEEZECLOUD_LICENCE') . cstring($client, 'COLON') . ' ' . $json->{'license'},
+		type => 'text',
+	} if $json->{'license'};
 
-	$log->debug('_makeMetadata ended.');
+	$log->debug('_advancedMenuItems ended.');
+	return $trackinfo;
+}
 
-	return \%$DATA;
+sub _trackInfoHandler {
+	$log->debug('_trackInfoHandler started.');
+	my ( $client, $url, $track, $remoteMeta ) = @_;
+	return unless $url =~ /^soundcloud/; # no need to add menu items for tracks that are not SoundCloud
+	my $items = _advancedMenuItems( $client, _cacheReadTrack($url), 0 );
+	$log->debug('_trackInfoHandler ended.');
+	return $items;
 }
 
 sub _cacheWriteTrack {
 	$log->debug('_cacheWriteTrack started.');
-	my ($track) = @_;
-	my $searchType = 'track';
-	$log->debug('_cacheWriteTrack ID: ' . $track->{'urn'});
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-duration', $track->{'duration'} * 1000, META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-name', encode_utf8($track->{'name'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-artist', encode_utf8($track->{'artist'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-artwork_url', $track->{'icon'}, META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-bpm', (int($track->{'bpm'}) > 0 ? int($track->{'bpm'}) : ''), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-year', (int($track->{'year'}) > 0 ? int($track->{'year'}) : ''), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'} . '-genre', encode_utf8($track->{'genre'}), META_CACHE_TTL);
-	$cache->set($prefix . $searchType . '-' . $track->{'urn'}, $track->{'urn'}, META_CACHE_TTL);
+	my ($json) = @_;
+	$log->debug('_cacheWriteTrack ID: ' . $json->{'urn'});
+	$cache->set($json->{'urn'}, $json, META_CACHE_TTL);
 	$log->debug('_cacheWriteTrack ended.');
 }
 
 sub _cacheReadTrack {
 	$log->debug('_cacheReadTrack started.');
 	my ($urn) = @_;
-	my %track;
-	my $searchType = 'track';
-	$track{duration} = $cache->get($prefix . $searchType . '-' . $urn . '-duration');
-	$track{name} = $cache->get($prefix . $searchType . '-' . $urn . '-name');
-	$track{title} = decode_utf8($track{name});
-	$track{artist} = decode_utf8($cache->get($prefix . $searchType . '-' . $urn . '-artist'));
-	$track{user} = {username => $track{artist}};
-	$track{artwork_url} = $cache->get($prefix . $searchType . '-' . $urn . '-artwork_url');
-	$track{bpm} = $cache->get($prefix . $searchType . '-' . $urn . '-bpm');
-	$track{year} = $cache->get($prefix . $searchType . '-' . $urn . '-year');
-	$track{genre} = $cache->get($prefix . $searchType . '-' . $urn . '-genre');
-	$track{urn} = $urn;
-	$log->debug('_cacheReadTrack ID: ' . $track{'urn'} . ' ' . $urn);
+	$urn =~ s#soundcloud://##g; # if key accidentally starts with soundcloud:// remove it so only urn is left
+	$log->debug("Getting cache for " . $urn);
 	$log->debug('_cacheReadTrack ended.');
-	return \%track;
+	return $cache->get($urn);
 }
 
 # This method is called when the Slim::Networking::SimpleAsyncHTTP encountered
@@ -390,6 +443,7 @@ sub fetchMetadata {
 		# The methods are called when a response was received or an error
 		# occurred. Additional information to the http call is passed via
 		# the hash (third parameter).
+		$log->info("SoundCloud API call to ".$queryUrl);
 		my $http = Slim::Networking::SimpleAsyncHTTP->new(
 			\&_gotMetadata,
 			\&_gotMetadataError,
@@ -479,7 +533,7 @@ sub tracksHandler {
 	} elsif ($searchType eq 'tracks') {
 		$resource = "users/$uid/tracks";
 
-	} elsif ($searchType eq 'releated') {
+	} elsif ($searchType eq 'related') {
 		$quantity = API_MAX_ITEMS;
 		my $urn = $passDict->{'urn'} || '';
 		$resource = "tracks/$urn/related";
@@ -533,7 +587,7 @@ sub _getTracks {
 		return;
 	}
 
-	$log->debug("fetching: " . $queryUrl);
+	$log->info("SoundCloud API call to ".$queryUrl);
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 		# Called when a response has been received for the request.
@@ -553,7 +607,7 @@ sub _getTracks {
 
 			# Queries that uses recursion need to be terminated, either when the end of the list is reached (for some known search type),
 			# or when the maximum is reached (for search types that are 'infinite' (e.g. search or feed))
-			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks'];
+			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks','related'];
 			my $is_recursive = grep { $_ eq $searchType } @$recursiveSearchTypes;
 
 			if (
@@ -563,18 +617,6 @@ sub _getTracks {
 				if ($searchType eq 'friends') {
 					# Sort by Name.
 					$menu = [ sort { uc($a->{name}) cmp uc($b->{name}) } @$menu ];
-				}
-
-				my $i = 1;
-				if ($searchType eq 'tracks' || $searchType eq 'playlisttracks') {
-					for my $entry (@$menu) {
-						_cacheWriteTrack($entry);
-						$i++;
-					}
-
-					# Store the total in the cache last so that this is the last TTL to expire.
-					# If the total is in the cache then all the data should still be cached.
-					$cache->set($prefix . $searchType . $uid . '-' . '-total', ($total), META_CACHE_TTL);
 				}
 
 				# if quantity is still '' (meaning all), the quantity is equal to the total item retrieved
@@ -591,7 +633,7 @@ sub _getTracks {
 		},
 		# Called when no response was received or an error occurred.
 		sub {
-			$log->warn("error: $_[1]");
+			$log->error("error: $_[1]");
 			$callback->([ { name => $_[1], type => 'text' } ]);
 		},
 
@@ -619,8 +661,7 @@ sub metadata_provider {
 	my ( $client, $url, $args ) = @_;
 
 	my $urn = track_key($url);
-	my $searchType = 'track';
-	if ( $cache->get($prefix . $searchType . '-' . $urn)) {
+	if ( $cache->get($urn)) {
 		$log->debug('Metadata cache hit on ID: ' . $urn);
 		my $params = $args->{params};
 		$params->{isFromCache} = 1;
@@ -661,7 +702,7 @@ sub urlHandler {
 
 	$url = URI::Escape::uri_escape_utf8($url);
 	my $queryUrl = "https://api.soundcloud.com/resolve?url=$url";
-	$log->debug("fetching: $queryUrl");
+	$log->info("SoundCloud API call to ".$queryUrl);
 
 	if (Plugins::SqueezeCloud::Oauth2::isAccessTokenExpired()) {
 		Plugins::SqueezeCloud::Oauth2::getAccessTokenWithRefreshToken(\&urlHandler, @_);
@@ -683,7 +724,7 @@ sub urlHandler {
 				}
 			},
 			sub {
-				$log->warn("error: $_[1]");
+				$log->error("error: $_[1]");
 				$callback->([ { name => $_[1], type => 'text' } ]);
 			},
 		)->get($queryUrl, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders());
