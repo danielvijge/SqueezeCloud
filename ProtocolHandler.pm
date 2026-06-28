@@ -170,7 +170,9 @@ sub isRemote { 1 }
 
 sub scanUrl {
 	my ($class, $url, $args) = @_;
+	$log->debug('scanUrl started.');
 	$args->{cb}->( $args->{song}->currentTrack() );
+	$log->debug('scanUrl ended.');
 }
 
 sub gotNextTrack {
@@ -178,6 +180,8 @@ sub gotNextTrack {
 	my $client = $http->params->{client};
 	my $song   = $http->params->{song};
 	my $url    = $song->currentTrack()->url;
+	$log->debug('gotNextTrack started.');
+
 	my $track  = eval { from_json( $http->content ) };
 
 	if ( $@ || $track->{error} ) {
@@ -209,23 +213,28 @@ sub gotNextTrack {
 
 	$song->streamUrl($stream);
 
-	my $meta = _makeMetadata($track);
+	my $args = { params => {isProtocolHandler => 1}};
+	my $meta = Plugins::SqueezeCloud::Plugin::_makeMetadata($client, $track, $args);
 	$song->duration( $meta->{duration} );
 
 	$log->info("setting ". 'soundcloud_meta_' . $track->{urn});
 	$cache->set($prefix . 'track' . '-' . $track->{urn} , $meta, META_CACHE_TTL);
 
 	$http->params->{callback}->();
+	$log->debug('gotNextTrack ended.');
 }
 
 sub gotNextTrackError {
 	my $http = shift;
+	$log->debug('gotNextTrackError started.');
 	$log->error('Error getting track '.$http->url.' - '.$http->error);
 	$http->params->{errorCallback}->( 'PLUGIN_SQUEEZECLOUD_ERROR', $http->error );
+	$log->debug('gotNextTrackError ended.');
 }
 
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
+	$log->debug('getNextTrack started.');
 
 	my $client = $song->master();
 	my $url    = $song->currentTrack()->url;
@@ -256,15 +265,18 @@ sub getNextTrack {
 		},
 	);
 
-	main::DEBUGLOG && $log->is_debug && $log->debug("Getting track from soundcloud for $urn");
+	$log->info("Getting track from soundcloud for $urn using $trackURL");
 
 	$http->get( $trackURL, Plugins::SqueezeCloud::Oauth2::getAuthenticationHeaders() );
+	$log->debug('getNextTrack ended.');
 }
 
 # To support remote streaming (synced players, slimp3/SB1), we need to subclass Protocols::HTTP
 sub new {
 	my $class  = shift;
 	my $args   = shift;
+
+	$log->debug('new started.');
 
 	my $client = $args->{client};
 
@@ -282,6 +294,7 @@ sub new {
 
 	${*$sock}{contentType} = 'audio/mpeg';
 
+	$log->debug('new ended.');
 	return $sock;
 }
 
@@ -289,44 +302,55 @@ sub new {
 # Track Info menu
 sub trackInfo {
 	my ( $class, $client, $track ) = @_;
+	$log->debug('trackInfo started.');
 
 	my $url = $track->url;
-	$log->info("trackInfo: " . $url);
+	$log->debug("trackInfo: " . $url);
+	$log->debug('trackInfo ended.');
 }
 
 # Track Info menu
 sub trackInfoURL {
 	my ( $class, $client, $url ) = @_;
-	$log->info("trackInfoURL: " . $url);
+	$log->debug('trackInfoUrl started.');
+	$log->debug("trackInfoURL: " . $url);
+	$log->debug('trackInfoUrl ended.');
 	return undef;
 }
 
 # Metadata for a URL, used by CLI/JSON clients
 sub getMetadataFor {
 	my ( $class, $client, $url ) = @_;
+	$log->debug('getMetadataFor started.');
 	my $args = { params => {isProtocolHandler => 1}};
+	$log->debug('getMetadataFor ended.');
 	return Plugins::SqueezeCloud::Plugin::metadata_provider($client, $url, $args);
 }
 
 sub canDirectStreamSong {
 	my ( $class, $client, $song ) = @_;
+	$log->debug('canDirectStreamSong started.');
 
 	# We need to check with the base class (HTTP) to see if we
 	# are synced or if the user has set mp3StreamingMethod
+	$log->debug('canDirectStreamSong ended.');
 	return $class->SUPER::canDirectStream( $client, $song->streamUrl(), $class->getFormatForURL() );
 }
 
 # If an audio stream fails, keep playing
 sub handleDirectError {
 	my ( $class, $client, $url, $response, $status_line ) = @_;
+	$log->debug('handleDirectError started.');
 
 	main::INFOLOG && $log->info("Direct stream failed: $url [$response] $status_line");
 
 	$client->controller()->playerStreamingFailed( $client, 'PLUGIN_SQUEEZECLOUD_STREAM_FAILED' );
+	$log->debug('handleDirectError ended.');
 }
 
 sub explodePlaylist {
 	my ( $class, $client, $uri, $callback ) = @_;
+	$log->debug('explodePlaylist started.');
 
 	if ( $uri =~ Plugins::SqueezeCloud::Plugin::PAGE_URL_REGEXP ) {
 		Plugins::SqueezeCloud::Plugin::urlHandler(
@@ -338,6 +362,7 @@ sub explodePlaylist {
 	else {
 		$callback->([$uri]);
 	}
+	$log->debug('explodePlaylist ended.');
 }
 
 1;
