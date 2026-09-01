@@ -497,7 +497,7 @@ sub tracksHandler {
 	my $pageSize = API_DEFAULT_ITEMS_COUNT;
 	my $quantity = ''; # placeholder for all, can be overwritten later
 
-	my $searchType = $passDict->{'type'} || 'search';
+	my $searchType = $passDict->{'type'};
 	my $searchStr = ($searchType eq 'tags') ? "&tags=" : "&q=";
 	my $search = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
 
@@ -575,6 +575,10 @@ sub tracksHandler {
 		if ( $args->{'search'} ) {
 			$params .= "&access=playable,preview";
 		}
+	}
+
+	if ($search ne '') {
+		$searchType = 'search';
 	}
 	
 	my $queryUrl = "https://api.soundcloud.com/" . $resource . "?" . $extras . $params . $search;
