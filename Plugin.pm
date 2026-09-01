@@ -497,7 +497,7 @@ sub tracksHandler {
 	my $pageSize = API_DEFAULT_ITEMS_COUNT;
 	my $quantity = ''; # placeholder for all, can be overwritten later
 
-	my $searchType = $passDict->{'type'};
+	my $searchType = $passDict->{'type'} || 'search';
 	my $searchStr = ($searchType eq 'tags') ? "&tags=" : "&q=";
 	my $search = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
 
@@ -613,7 +613,7 @@ sub _getTracks {
 
 			# Queries that uses recursion need to be terminated, either when the end of the list is reached (for some known search type),
 			# or when the maximum is reached (for search types that are 'infinite' (e.g. search or feed))
-			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks','related'];
+			my $recursiveSearchTypes = ['favorites','friend','friends','liked_playlists','playlists','playlisttracks','tracks','related','search'];
 			my $is_recursive = grep { $_ eq $searchType } @$recursiveSearchTypes;
 
 			if (
