@@ -499,7 +499,7 @@ sub tracksHandler {
 
 	my $searchType = $passDict->{'type'};
 	my $searchStr = ($searchType eq 'tags') ? "&tags=" : "&q=";
-	my $search = $args->{'search'} ? $searchStr . URI::Escape::uri_escape_utf8($args->{'search'}) : '';
+	my $search = ($passDict->{'search'} || $args->{'search'}) ? $searchStr . URI::Escape::uri_escape_utf8($passDict->{'search'} || $args->{'search'}) : '';
 
 	# The parser is the method that will be called when the
 	# server has returned some data in the SimpleAsyncHTTP call.
@@ -1027,6 +1027,53 @@ sub toplevel {
 			{ name => string('PLUGIN_SQUEEZECLOUD_LIKED_TRACKS'), type => 'link',
 				url  => \&tracksHandler, passthrough => [ { type => 'favorites' } ] }
 		);
+
+		# Show a quick-entry menu for tags (genres)
+		# The SoundCloud API does not provide a way to get popular tags. This is the list of genres (tags) that can be
+		# choosen when uploading a new track.
+		my $tags = [
+			"Alternative Rock",
+			"Ambient",
+			"Classical",
+			"Country",
+			"Dance & EDM",
+			"Dancehall",
+			"Deep House",
+			"Disco",
+			"Drum & Bass",
+			"Dubstep",
+			"Electronic",
+			"Folk & Singer-Songwriter",
+			"Hip-Hop & Rap",
+			"House",
+			"Indie",
+			"Jazz & Blues",
+			"Latin",
+			"Metal",
+			"Piano",
+			"Pop",
+			"R&B & Soul",
+			"Reggae",
+			"Reggaeton",
+			"Rock",
+			"Soundtrack",
+			"Speech",
+			"Techno",
+			"Trance",
+			"Trap",
+			"Triphop",
+		];
+		push(@$callbacks,
+			{ 
+				name => string('PLUGIN_SQUEEZECLOUD_GENRES'), 
+				items => [ map {
+					{ name => $_, type => 'link',
+					  url  => \&tracksHandler, passthrough => [ { type => 'tags', params => '&order=hotness', search => $_ } ]
+					}
+				} @$tags ]
+			}
+		);
+
 
 		# Menu entry 'New tracks'
 		push(@$callbacks,
