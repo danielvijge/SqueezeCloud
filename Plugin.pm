@@ -1045,29 +1045,29 @@ sub toplevel {
 			url  => \&tracksHandler, passthrough => [ { params => $param . '&order=hotness' } ], }
 		);
 
-
 		# Menu entry 'Search'
 		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_SEARCH'), type => 'search',
-			url  => \&tracksHandler, passthrough => [ { params => '&order=hotness' } ], }
-		);
-
-		# Menu entry 'Search Artists'
-		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_FRIENDS_SEARCH'), type => 'search',
-			url  => \&tracksHandler, passthrough => [ { type => 'users', parser => \&_parseFriends, params => '&order=hotness' } ] }
-		);
-
-		# Menu entry 'Tags'
-		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_TAGS'), type => 'search',
-			url  => \&tracksHandler, passthrough => [ { type => 'tags', params => '&order=hotness' } ], }
-		);
-
-		# Menu entry 'Playlists'
-		push(@$callbacks,
-		{ name => string('PLUGIN_SQUEEZECLOUD_PLAYLIST_SEARCH'), type => 'search',
-			url  => \&tracksHandler, passthrough => [ { type => 'playlistsearch', parser => \&_parsePlaylists, params => '&order=hotness'  } ] }
+			{
+				name => string('PLUGIN_SQUEEZECLOUD_SEARCH'),
+				items => [
+					# Menu entry 'Search'
+					{ name => string('PLUGIN_SQUEEZECLOUD_SEARCH'), type => 'search',
+						url  => \&tracksHandler, passthrough => [ { params => '&order=hotness' } ]
+					},
+					# Menu entry 'Search Artists'
+					{ name => string('PLUGIN_SQUEEZECLOUD_FRIENDS_SEARCH'), type => 'search',
+						url  => \&tracksHandler, passthrough => [ { type => 'users', parser => \&_parseFriends, params => '&order=hotness' } ]
+					},
+					# Menu entry 'Tags'
+					{ name => string('PLUGIN_SQUEEZECLOUD_TAGS'), type => 'search',
+						url  => \&tracksHandler, passthrough => [ { type => 'tags', params => '&order=hotness' } ]
+					},
+					# Menu entry 'Playlists'
+					{ name => string('PLUGIN_SQUEEZECLOUD_PLAYLIST_SEARCH'), type => 'search',
+						url  => \&tracksHandler, passthrough => [ { type => 'playlistsearch', parser => \&_parsePlaylists, params => '&order=hotness' } ]
+					}
+				]
+			}
 		);
 
 		# Menu entry to enter an URL manually
